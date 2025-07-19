@@ -12,7 +12,7 @@ export default function Home() {
   const [geminiResult] = useState("");
   return (
     <>
-      <GeminiResult result={geminiResult} />
+      <GeminiResult result={geminiResult} loading={false} />
       <Map />
     </>
   );

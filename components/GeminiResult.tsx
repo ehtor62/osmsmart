@@ -2,42 +2,33 @@ import React from "react";
 
 interface GeminiResultProps {
   result: string;
-  loading: boolean;
+  loading?: boolean;
 }
 
 const GeminiResult: React.FC<GeminiResultProps> = ({ result, loading }) => {
   if (loading) {
-    // Show huge spinner overlay
     return (
       <div style={{
+        width: "100vw",
         position: "fixed",
         top: 0,
         left: 0,
-        width: "100vw",
-        height: "100vh",
+        zIndex: 5000,
         background: "rgba(255,255,255,0.85)",
-        zIndex: 3000,
         display: "flex",
         alignItems: "center",
-        justifyContent: "center"
+        justifyContent: "center",
+        height: "80px",
+        fontSize: "1.1rem",
+        color: "#2563eb",
+        fontWeight: "bold"
       }}>
-        <div style={{
-          width: 120,
-          height: 120,
-          border: "16px solid #e0e7ef",
-          borderTop: "16px solid #2563eb",
-          borderRadius: "50%",
-          animation: "spin 1.2s linear infinite"
-        }} />
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
+        Loading Gemini results...
       </div>
     );
   }
+
+  if (!result) return null;
 
   // Extract markdown table and summary from result
   const tableMatch = result.match(/<table[\s\S]*?<\/table>/i);

@@ -6,12 +6,11 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Rectangle } from "react
 // Helper to parse Gemini results for markers
 function parseGeminiMarkers(summary: string): Array<{ name: string; description: string; lat: number; lon: number }> {
   // Find the markdown table (robustly)
-  const tableRegex = /((?:\|[^\n]+\n)+)/g;
-  const tables = summary.match(tableRegex);
-  if (!tables) return [];
-  // Find the table with the expected header
-  const table = tables.find(t => t.includes('Name of the Element') && t.includes('Latitude') && t.includes('Longitude'));
-  if (!table) return [];
+  // Find the markdown table (robustly)
+  const tableRegex = /(\|\s*Name\s*\|[\s\S]*?\n\|---[\s\S]*?)(?=\n\n|$)/;
+  const tableMatch = summary.match(tableRegex);
+  if (!tableMatch) return [];
+  const table = tableMatch[0];
   const lines = table.split('\n').filter(line => line.trim().startsWith('|'));
   // Remove header and separator
   const dataLines = lines.filter((_, i) => i > 1);
@@ -19,13 +18,15 @@ function parseGeminiMarkers(summary: string): Array<{ name: string; description:
   dataLines.forEach(line => {
     // Split and trim, but keep empty cells
     const cells = line.split('|').map(cell => cell.trim());
-    // Expect: | Name | Description | ... | ... | Latitude | Longitude |
+    // Expect: | Name | Description | Best For | Insider Tips | Latitude | Longitude |
+    // cells[1]=Name, cells[2]=Description, cells[5]=Latitude, cells[6]=Longitude
     if (cells.length >= 7) {
       const name = cells[1];
       const description = cells[2];
       const lat = parseFloat(cells[5]);
       const lon = parseFloat(cells[6]);
       if (!isNaN(lat) && !isNaN(lon)) {
+        console.log(`Gemini marker lat/lon:`, lat, lon);
         markers.push({ name, description, lat, lon });
       }
     }
