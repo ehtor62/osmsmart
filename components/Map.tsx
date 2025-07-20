@@ -392,7 +392,85 @@ export default function Map() {
           </div>
         </div>
         <div className="p-4" style={{ fontSize: '0.85rem', overflowWrap: 'anywhere', color: 'black' }}>
-          <div dangerouslySetInnerHTML={{ __html: marked.parse(summary) }} />
+          {/* Render summary above the table if a markdown table exists */}
+          {(() => {
+            // Find markdown table
+            const tableRegex = /(\|\s*Name\s*\|[\s\S]*?\n\|---[\s\S]*?)(?=\n\n|$)/;
+            const tableMatch = summary.match(tableRegex);
+            // Responsive font size for table
+            const tableStyle: React.CSSProperties = {
+              marginTop: 18,
+              fontSize: '0.95rem',
+            };
+            if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 600px)').matches) {
+              tableStyle.fontSize = '0.75rem';
+            }
+            if (tableMatch) {
+              const tableMd = tableMatch[0];
+              let summaryMd = summary.replace(tableMd, '').trim();
+              // Remove introductory phrases
+              //summaryMd = summaryMd.replace(/^(Here(?:'s| is) a summary of the tourist-relevant OpenStreetMap data:?|Summary:|Tourist summary:?|Gemini summary:?|Gemini result:?|Tourist information:?|For tourists:?|The following is a summary:?|Below is a summary:?|This is a summary:?|Summary for tourists:?)/i, '').trim();
+              // Always start with 'Summary for Tourists:'
+              summaryMd = `Summary for Tourists:\n\n${summaryMd}`;
+              // Parse table rows
+              const lines = tableMd.split('\n').filter(line => line.trim().startsWith('|'));
+              // Remove header and separator
+              const dataLines = lines.filter((_, i) => i > 1);
+              return (
+                <>
+                  {/* Summary above */}
+                  <div dangerouslySetInnerHTML={{ __html: marked.parse(summaryMd) }} />
+                  {/* Table rows as buttons */}
+                  <div style={tableStyle}>
+                    {dataLines.map((line, idx) => {
+                      const cells = line.split('|').map(cell => cell.trim());
+                      // Expect: | Name | Description | Best For | Insider Tips | Latitude | Longitude |
+                      // cells[1]=Name, cells[2]=Description, cells[3]=Best For, cells[4]=Insider Tips
+                      const name = cells[1] || '';
+                      const description = cells[2] || '';
+                      const bestFor = cells[3] || '';
+                      const insiderTips = cells[4] || '';
+                      const label = `${name}: ${description}${bestFor ? ' | Best for: ' + bestFor : ''}${insiderTips ? ' | Tip: ' + insiderTips : ''}`;
+                      // Omit button if label is empty or only contains a colon
+                      if (!label.trim() || /^:?\s*$/.test(label.trim()) || label.trim() === ':') {
+                        return null;
+                      }
+                      return (
+                        <button
+                          key={idx}
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            marginBottom: 8,
+                            padding: '10px 12px',
+                            fontSize: tableStyle.fontSize,
+                            background: '#f1f5f9',
+                            color: '#2563eb',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 8,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                          }}
+                          onClick={() => {
+                            // You can add custom logic here, e.g. show details, highlight marker, etc.
+                            alert(label);
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            } else {
+              let summaryMd = summary.trim();
+              summaryMd = summaryMd.replace(/^(Here(?:'s| is) a summary of the tourist-relevant OpenStreetMap data:?|Summary:|Tourist summary:?|Gemini summary:?|Gemini result:?|Tourist information:?|For tourists:?|The following is a summary:?|Below is a summary:?|This is a summary:?|Summary for tourists:?)/i, '').trim();
+              summaryMd = `Summary for Tourists:\n\n${summaryMd}`;
+              return <div dangerouslySetInnerHTML={{ __html: marked.parse(summaryMd) }} />;
+            }
+          })()}
         </div>
       </div>
 
@@ -448,17 +526,19 @@ export default function Map() {
                   </div>
                 </Popup>
               </Marker>
-              {geminiMarkers.map((marker, idx) => (
-                <Marker key={idx} position={[marker.lat, marker.lon]} icon={markerIcon}>
-                  <Popup>
-                    <div style={{ maxWidth: 300 }}>
-                      <div className="font-bold mb-1">{marker.name}</div>
-                      <div>{marker.description}</div>
-                      <div className="text-xs text-gray-700">lat: {marker.lat}, lon: {marker.lon}</div>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+              {geminiMarkers
+                .filter(marker => marker.name?.trim() || marker.description?.trim())
+                .map((marker, idx) => (
+                  <Marker key={idx} position={[marker.lat, marker.lon]} icon={markerIcon}>
+                    <Popup>
+                      <div style={{ maxWidth: 300 }}>
+                        <div className="font-bold mb-1">{marker.name}</div>
+                        <div>{marker.description}</div>
+                        <div className="text-xs text-gray-700">lat: {marker.lat}, lon: {marker.lon}</div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
               {/* Show tile rectangle only after OSM data is loaded, regardless of panel state */}
               {tileBounds && osmData && osmData.length > 0 && (
                 <>
