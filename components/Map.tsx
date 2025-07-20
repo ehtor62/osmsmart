@@ -350,9 +350,7 @@ export default function Map() {
                   {el.nodes && el.nodes.length > 0 && (
                     <div className="text-xs text-gray-700">nodes: [{el.nodes.join(", ")}]</div>
                   )}
-                  {el.members && el.members.length > 0 && (
-                    <div className="text-xs text-gray-700">members: [{el.members.map(m => `${m.type}#${m.ref} (${m.role})`).join(", ")}]</div>
-                  )}
+                  {/* 'members: [...]' omitted as requested */}
                 </li>
               ))
             ) : (
