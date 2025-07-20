@@ -39,7 +39,7 @@ const GeminiResult: React.FC<GeminiResultProps> = ({ result, loading }) => {
 
   return (
     <>
-      {(tableHtml || summaryHtml) && (
+      {(summaryHtml || tableHtml) && (
         <div style={{
           position: "fixed",
           top: 0,
@@ -57,12 +57,13 @@ const GeminiResult: React.FC<GeminiResultProps> = ({ result, loading }) => {
           overflowY: "auto",
           fontSize: "0.65rem"
         }}>
-          {tableHtml && (
-            <div style={{ width: "100%", maxWidth: 900, fontSize: "0.65rem" }} dangerouslySetInnerHTML={{ __html: tableHtml }} />
-          )}
           {summaryHtml && (
             <div style={{ width: "100%", maxWidth: 900, marginTop: "1.5rem", fontSize: "0.65rem" }} dangerouslySetInnerHTML={{ __html: summaryHtml }} />
           )}
+          {tableHtml && (
+            <div style={{ width: "100%", maxWidth: 900, fontSize: "0.65rem" }} dangerouslySetInnerHTML={{ __html: tableHtml }} />
+          )}
+          
         </div>
       )}
     </>
