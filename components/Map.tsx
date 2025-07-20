@@ -82,28 +82,40 @@ export default function Map() {
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const [topPanelOpen, setTopPanelOpen] = useState<boolean>(false);
   const [topPanelMinimized, setTopPanelMinimized] = useState<boolean>(false);
+  const [showInitModal, setShowInitModal] = useState<boolean>(true);
+  const [shouldFetchOsm, setShouldFetchOsm] = useState<boolean>(false);
   const zoomLevel = 16;
 
+  // On load, center on Zurich only, do not open panel
   useEffect(() => {
+    setPosition([47.3769, 8.5417]);
+    setPanelOpen(false);
+  }, []);
+
+  // Function to trigger geolocation search and OSM fetch
+  const handleFindLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setPosition([pos.coords.latitude, pos.coords.longitude]);
-          setPanelOpen(true);
+          setShowInitModal(false);
+          setShouldFetchOsm(true);
         },
         () => {
           setPosition([47.3769, 8.5417]); // fallback: Zurich
-          setPanelOpen(true);
+          setShowInitModal(false);
+          setShouldFetchOsm(true);
         }
       );
     } else {
       setPosition([47.3769, 8.5417]); // fallback: Zurich
-      setPanelOpen(true);
+      setShowInitModal(false);
+      setShouldFetchOsm(true);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    if (position) {
+    if (shouldFetchOsm && position) {
       // Fetch OSM data from API
       fetch(`/api/tile?lat=${position[0]}&lng=${position[1]}`)
         .then(async (res) => {
@@ -127,15 +139,19 @@ export default function Map() {
                   // Remove any element with type 'route' just in case
                   .filter((el: OsmElement) => el.type !== 'route')
               );
+              setPanelOpen(true);
             } else {
               setOsmData([]);
+              setPanelOpen(true);
             }
           } catch {
             setOsmData([]);
+            setPanelOpen(true);
           }
         });
+      setShouldFetchOsm(false);
     }
-  }, [position]);
+  }, [shouldFetchOsm, position]);
 
   // Helper to get tile bounds for zoom 16
   function getTileBounds(lat: number, lng: number, zoom: number): [[number, number], [number, number]] {
@@ -189,7 +205,79 @@ export default function Map() {
   }
 
   return (
-    <div className="w-screen h-screen flex flex-row">
+    <div className="w-screen h-screen flex flex-row" style={{ position: 'relative' }}>
+      {/* Initial modal overlay */}
+      {showInitModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(30, 41, 59, 0.55)',
+            zIndex: 5000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.95)',
+              borderRadius: 16,
+              boxShadow: '0 4px 32px rgba(0,0,0,0.15)',
+              padding: '32px 40px',
+              minWidth: 320,
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 24,
+            }}
+          >
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: 12, color: '#2563eb' }}>Do You Know What&apos;s Around You?</h2>
+            <div style={{ marginBottom: 18, color: '#334155', fontSize: '1rem' }}>
+              Choose an option to get started:
+            </div>
+            <div style={{ display: 'flex', gap: 18, justifyContent: 'center' }}>
+              <button
+                style={{
+                  padding: '10px 24px',
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+                  transition: 'background 0.2s',
+                }}
+                onClick={handleFindLocation}
+              >
+                Everything around me
+              </button>
+              <button
+                style={{
+                  padding: '10px 24px',
+                  background: '#38bdf8',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+                  transition: 'background 0.2s',
+                }}
+                onClick={() => setShowInitModal(false)}
+              >
+                I have a specific interest 
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Sliding left panel */}
       <div
         style={{
@@ -219,7 +307,7 @@ export default function Map() {
               if (!osmData) return;
               setLoadingSummary(true);
               setSummary("");
-              setPanelOpen(false);
+              setPanelOpen(false); // Hide side panel, keep tile visible
               try {
                 const response = await fetch("/api/gemini", {
                   method: "POST",
@@ -371,7 +459,8 @@ export default function Map() {
                   </Popup>
                 </Marker>
               ))}
-              {tileBounds && (
+              {/* Show tile rectangle only after OSM data is loaded, regardless of panel state */}
+              {tileBounds && osmData && osmData.length > 0 && (
                 <>
                   {/* Highlight the tile bounds with a rectangle */}
                   <Rectangle bounds={tileBounds} pathOptions={{ color: "red", weight: 2 }} />
