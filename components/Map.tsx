@@ -127,17 +127,29 @@ export default function Map() {
             const data = await res.json();
             if (data && data.elements) {
               // Only keep elements with tags, not of type 'way', and not natural: tree
+              // List of keywords to filter out
+              const omitKeywords = [
+                "bonnet", "emergency", "crossing", "barrier", "bus", "couplings", "direction", "camera", "highway", "defibrillator", "public_transport",
+                "amenity: bench", "amenity: drinking_water", "amenity: parking_entrance", "amenity: bank", "amenity: parking", "amenity: waste_disposal",
+                "amenity: bicycle_parking", "amenity: taxi", "amenity: bureau_de_change", "amenity: fast_food", "amenity: vending_machine", "amenity: waste_basket",
+                "amenity: post_box", "amenity: compressed_air", "amenity: toilets", "amenity: recycling"
+              ];
               setOsmData(
                 data.elements
-                  .filter((el: OsmElement) =>
-                    el.tags &&
-                    Object.keys(el.tags).length > 0 &&
-                    el.type !== 'way' &&
-                    el.type !== 'route' &&
-                    !(el.tags["natural"] === "tree")
-                  )
-                  // Remove any element with type 'route' just in case
-                  .filter((el: OsmElement) => el.type !== 'route')
+                  .filter((el: OsmElement) => {
+                    if (!el.tags || Object.keys(el.tags).length === 0) return false;
+                    if (el.type === 'way' || el.type === 'route' || el.type === 'relation') return false;
+                    if (el.tags["natural"] === "tree") return false;
+                    // Omit if any tag key or key:value matches omitKeywords
+                    for (const [k, v] of Object.entries(el.tags)) {
+                      if (omitKeywords.includes(k)) return false;
+                      if (omitKeywords.includes(`${k}: ${v}`)) return false;
+                    }
+                    // Omit if exactly 5 addr:* fields
+                    const addrCount = Object.keys(el.tags).filter(key => key.startsWith('addr:')).length;
+                    if (addrCount === 5) return false;
+                    return true;
+                  })
               );
               setPanelOpen(true);
             } else {
@@ -350,7 +362,9 @@ export default function Map() {
                   {el.nodes && el.nodes.length > 0 && (
                     <div className="text-xs text-gray-700">nodes: [{el.nodes.join(", ")}]</div>
                   )}
-                  {/* 'members: [...]' omitted as requested */}
+                  {el.members && el.members.length > 0 && (
+                    <div className="text-xs text-gray-700">members: [{el.members.map(m => `${m.type}#${m.ref} (${m.role})`).join(", ")}]</div>
+                  )}
                 </li>
               ))
             ) : (
