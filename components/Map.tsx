@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import { marked } from "marked";
 import { MapContainer, TileLayer, Marker, Popup, useMap, Rectangle } from "react-leaflet";
 // ...existing code...
 // Helper to parse Gemini results for markers
@@ -75,6 +74,8 @@ type OsmElement = {
 };
 
 export default function Map() {
+  // City/countryside toggle state
+  const [cityMode, setCityMode] = useState<'inside' | 'outside'>('inside');
   // ...existing state declarations...
   // (do not declare showGeminiSpinner here)
   const [position, setPosition] = useState<[number, number] | null>(null);
@@ -103,7 +104,7 @@ export default function Map() {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           // For testing: add 1 to latitude
-          setPosition([pos.coords.latitude + 6.2, pos.coords.longitude+1.4]);
+          setPosition([pos.coords.latitude, pos.coords.longitude]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -118,95 +119,131 @@ export default function Map() {
   };
 
   useEffect(() => {
+    // Always use a stable dependency array: [shouldFetchOsm, position?.[0], position?.[1], cityMode]
     if (shouldFetchOsm && position) {
       setShowSpinner(false); // Hide spinner when position is set and OSM fetch starts
-      // Fetch OSM data from API
-      fetch(`/api/tile?lat=${position[0]}&lng=${position[1]}`)
-        .then(async (res) => {
-          if (!res.ok) {
-            setOsmData([]);
-            return;
-          }
-          try {
-            const data = await res.json();
-            if (data && data.elements) {
-              // Only keep elements with tags, not of type 'way', and not natural: tree
-              // List of keywords to filter out
-              const omitKeywords = [
-                "bonnet", "power", "entrance", "healthcare", "traffic_calming", "railway", "emergency", "access", "crossing", "barrier", "bus", "couplings", "direction", "camera", "highway", "defibrillator", "public_transport",
-                "amenity: bench", "amenity: drinking_water", "amenity: parking_entrance", "amenity: bank", "amenity: parking", "amenity: waste_disposal", "office: lawyer", 
-                "amenity: bicycle_parking", "office: energy_supplier", "amenity: social_facility", "amenity: kindergarten", "amenity: veterinary", "amenity: pharmacy", "amenity: charging_station", "amenity: post_office", "amenity: atm", "amenity: taxi", "amenity: bureau_de_change", "amenity: doctors", "amenity: dentist", "amenity: fast_food", "amenity: vending_machine", "amenity: waste_basket",
-                "amenity: post_box", "amenity: compressed_air", "amenity: toilets", "amenity: recycling"
-              ];
-              setOsmData(
-                data.elements
-                  .filter((el: OsmElement) => {
-                    if (!el.tags || Object.keys(el.tags).length === 0) return false;
-                    // Omit if any tag key or key:value matches omitKeywords
-                    for (const [k, v] of Object.entries(el.tags)) {
-                      if (omitKeywords.includes(k)) return false;
-                      if (omitKeywords.includes(`${k}: ${v}`)) return false;
-                      // Omit if tag key starts with 'TMC:' (case-insensitive)
-                      if (k.toLowerCase().startsWith('tmc:')) return false;
-                      // Omit if tag is 'natural: tree' (case-insensitive)
-                      if (k.toLowerCase() === 'natural' && v.toLowerCase() === 'tree') return false;
-                      // Omit if tag is 'man_made: surveillance' (case-insensitive)
-                      if (k.toLowerCase() === 'man_made' && v.toLowerCase() === 'surveillance') return false;
-                      // Omit if tag is 'public_transport:version: 2' (case-insensitive)
-                      if (k.toLowerCase() === 'public_transport:version' && v.toLowerCase() === '2') return false;
-                    }
-                    // Omit if exactly 5 addr:* fields
-                    const addrCount = Object.keys(el.tags).filter(key => key.startsWith('addr:')).length;
-                    if (addrCount === 5) return false;
-                    return true;
-                  })
-              );
-              setPanelOpen(true);
-            } else {
-              setOsmData([]);
-              setPanelOpen(true);
+      // Helper to get tile x/y for given lat/lng/zoom
+      function latLngToTile(lat: number, lng: number, zoom: number) {
+        const n = Math.pow(2, zoom);
+        const xtile = Math.floor(((lng + 180) / 360) * n);
+        // FIX: multiply by n inside the parentheses for ytile
+        const ytile = Math.floor(
+          ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * n
+        );
+        return { xtile, ytile };
+      }
+
+      // Helper to get lat/lng for tile x/y/zoom (center of tile)
+      function tileToLatLng(xtile: number, ytile: number, zoom: number): [number, number] {
+        const n = Math.pow(2, zoom);
+        const lon = (xtile + 0.5) / n * 360 - 180;
+        const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ytile + 0.5) / n)));
+        const lat = latRad * 180 / Math.PI;
+        return [lat, lon];
+      }
+
+      const omitKeywords = [
+        "bonnet", "power", "admin_level", "entrance", "healthcare", "traffic_calming", "railway", "emergency", "access", "crossing", "barrier", "bus", "couplings", "direction", "camera", "highway", "defibrillator", "public_transport",
+        "amenity: bench", "amenity: drinking_water", "amenity: parking_entrance", "amenity: bank", "amenity: parking", "amenity: waste_disposal", "office: lawyer", 
+        "amenity: bicycle_parking", "office: energy_supplier", "amenity: social_facility", "amenity: kindergarten", "amenity: veterinary", "amenity: pharmacy", "amenity: charging_station", "amenity: post_office", "amenity: atm", "amenity: taxi", "amenity: bureau_de_change", "amenity: doctors", "amenity: dentist", "amenity: fast_food", "amenity: vending_machine", "amenity: waste_basket",
+        "amenity: post_box", "amenity: compressed_air", "amenity: toilets", "amenity: recycling"
+      ];
+
+      // Debug: log the position used for tile calculation
+      console.log('OSM fetch: using position', position);
+
+      // Get tile x/y for current position
+      const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
+      console.log('OSM fetch: xtile, ytile', xtile, ytile, 'for position', position, 'at zoom', zoomLevel);
+
+      // Get all tile centers to fetch
+      let tiles: Array<{ lat: number; lng: number }> = [];
+      if (cityMode === 'inside') {
+        // Use the user's actual position, not the tile center
+        tiles = [{ lat: position[0], lng: position[1] }];
+      } else {
+        // 3x3 grid: current + 8 surrounding, use tile centers, but deduplicate
+        const tileSet = new Set<string>();
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const x = xtile + dx;
+            const y = ytile + dy;
+            const [lat, lng] = tileToLatLng(x, y, zoomLevel);
+            const key = `${x},${y}`;
+            if (!tileSet.has(key)) {
+              tileSet.add(key);
+              tiles.push({ lat, lng });
+              // Debug: log each tile center
+              console.log(`OSM fetch: tile center for x=${x}, y=${y}: lat=${lat}, lng=${lng}`);
             }
-          } catch {
-            setOsmData([]);
-            setPanelOpen(true);
           }
+        }
+      }
+
+      // Fetch all tiles in parallel, with debug logging for each fetch
+      Promise.all(
+        tiles.map(({ lat, lng }, i) =>
+          fetch(`/api/tile?lat=${lat}&lng=${lng}`)
+            .then(async (res) => {
+              if (!res.ok) {
+                console.warn(`Tile API call failed for tile #${i} at lat=${lat}, lng=${lng}`);
+                return [];
+              }
+              try {
+                const data = await res.json();
+                console.log(`Tile API response for tile #${i} at lat=${lat}, lng=${lng}:`, data);
+                return data && data.elements ? data.elements : [];
+              } catch (e) {
+                console.error(`Tile API JSON parse error for tile #${i} at lat=${lat}, lng=${lng}:`, e);
+                return [];
+              }
+            })
+        )
+      ).then((results) => {
+        // Flatten and deduplicate by id
+        const allElements: OsmElement[] = ([] as OsmElement[]).concat(...results);
+        // Debug: log raw elements before filtering
+        console.log('Fetched OSM elements (raw):', allElements);
+        // OSM ids are only unique within their type, so use type+id as key
+        const seen = new Set<string>();
+        const filtered = allElements.filter((el) => {
+          if (el.id == null || el.type == null) return false;
+          const key = `${el.type}:${el.id}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          if (!el.tags || Object.keys(el.tags).length === 0) return false;
+          for (const [k, v] of Object.entries(el.tags)) {
+            if (omitKeywords.includes(k)) return false;
+            if (omitKeywords.includes(`${k}: ${v}`)) return false;
+            if (k.toLowerCase().startsWith('tmc:')) return false;
+            if (k.toLowerCase() === 'natural' && v.toLowerCase() === 'tree') return false;
+            if (k.toLowerCase() === 'man_made' && v.toLowerCase() === 'surveillance') return false;
+            if (k.toLowerCase() === 'public_transport:version' && v.toLowerCase() === '2') return false;
+            if (k.toLowerCase() === 'public_transport:version' && v.toLowerCase() === '1') return false;
+          }
+          const addrCount = Object.keys(el.tags).filter(key => key.startsWith('addr:')).length;
+          if (addrCount === 5) return false;
+          return true;
         });
+        console.log('Filtered OSM elements (to display):', filtered);
+        setOsmData(filtered);
+        setPanelOpen(true);
+      }).catch(() => {
+        setOsmData([]);
+        setPanelOpen(true);
+      });
       setShouldFetchOsm(false);
     }
-  }, [shouldFetchOsm, position]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldFetchOsm, position ? position[0] : null, position ? position[1] : null, cityMode]);
 
-  // Helper to get tile bounds for zoom 16
-  function getTileBounds(lat: number, lng: number, zoom: number): [[number, number], [number, number]] {
+  // Helper to get tile bounds for a given tile x/y/zoom
+  function getTileBoundsXY(xtile: number, ytile: number, zoom: number): [[number, number], [number, number]] {
     const n = Math.pow(2, zoom);
-    const xtile = Math.floor(((lng + 180) / 360) * n);
-    const ytile = Math.floor(
-      (
-        (1 -
-          Math.log(
-            Math.tan((lat * Math.PI) / 180) +
-              1 / Math.cos((lat * Math.PI) / 180)
-          ) /
-            Math.PI) /
-        2
-      ) * n
-    );
-    // Convert tile x/y back to bounds
     const lon1 = (xtile / n) * 360 - 180;
-    const lat1 =
-      (180 / Math.PI) *
-      Math.atan(
-        Math.sinh(
-          Math.PI * (1 - (2 * ytile) / n)
-        )
-      );
+    const lat1 = (180 / Math.PI) * Math.atan(Math.sinh(Math.PI * (1 - (2 * ytile) / n)));
     const lon2 = ((xtile + 1) / n) * 360 - 180;
-    const lat2 =
-      (180 / Math.PI) *
-      Math.atan(
-        Math.sinh(
-          Math.PI * (1 - (2 * (ytile + 1)) / n)
-        )
-      );
+    const lat2 = (180 / Math.PI) * Math.atan(Math.sinh(Math.PI * (1 - (2 * (ytile + 1)) / n)));
     return [
       [lat1, lon1],
       [lat2, lon2],
@@ -215,7 +252,36 @@ export default function Map() {
 
   let tileBounds: [[number, number], [number, number]] | null = null;
   if (position) {
-    tileBounds = getTileBounds(position[0], position[1], zoomLevel);
+    const latLngToTile = (lat: number, lng: number, zoom: number) => {
+      const n = Math.pow(2, zoom);
+      const xtile = Math.floor(((lng + 180) / 360) * n);
+      const ytile = Math.floor(
+        ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * n
+      );
+      return { xtile, ytile };
+    };
+    const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
+    if (cityMode === 'inside') {
+      tileBounds = getTileBoundsXY(xtile, ytile, zoomLevel);
+    } else {
+      // 3x3 grid: find min/max lat/lng from all 9 tile bounds
+      let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const x = xtile + dx;
+          const y = ytile + dy;
+          const [[lat1, lng1], [lat2, lng2]] = getTileBoundsXY(x, y, zoomLevel);
+          minLat = Math.min(minLat, lat1, lat2);
+          maxLat = Math.max(maxLat, lat1, lat2);
+          minLng = Math.min(minLng, lng1, lng2);
+          maxLng = Math.max(maxLng, lng1, lng2);
+        }
+      }
+      tileBounds = [
+        [minLat, minLng],
+        [maxLat, maxLng],
+      ];
+    }
   }
 
   // Parse Gemini markers from summary
@@ -367,6 +433,53 @@ export default function Map() {
                 I have a specific interest 
               </button>
             </div>
+            {/* Toggle for inside/outside city */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  userSelect: 'none',
+                }}
+              >
+                <span style={{ color: cityMode === 'inside' ? '#2563eb' : '#64748b', fontWeight: 600, fontSize: '0.98rem', minWidth: 70, textAlign: 'right' }}>inside city</span>
+                <div
+                  role="switch"
+                  aria-checked={cityMode === 'outside'}
+                  tabIndex={0}
+                  onClick={() => setCityMode(cityMode === 'inside' ? 'outside' : 'inside')}
+                  onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') setCityMode(cityMode === 'inside' ? 'outside' : 'inside'); }}
+                  style={{
+                    width: 54,
+                    height: 28,
+                    borderRadius: 16,
+                    background: cityMode === 'outside' ? '#2563eb' : '#e5e7eb',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    outline: 'none',
+                    border: cityMode === 'outside' ? '2px solid #2563eb' : '2px solid #e5e7eb',
+                    boxShadow: cityMode === 'outside' ? '0 2px 8px rgba(37,99,235,0.10)' : 'none',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 3,
+                      left: cityMode === 'inside' ? 3 : 23,
+                      width: 22,
+                      height: 22,
+                      borderRadius: '50%',
+                      background: '#fff',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                      transition: 'left 0.2s',
+                    }}
+                  />
+                </div>
+                <span style={{ color: cityMode === 'outside' ? '#2563eb' : '#64748b', fontWeight: 600, fontSize: '0.98rem', minWidth: 80, textAlign: 'left' }}>outside city</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -487,87 +600,124 @@ export default function Map() {
             
           </div>
         </div>
-        <div className="p-4" style={{ fontSize: '0.85rem', overflowWrap: 'anywhere', color: 'black' }}>
-          {/* Render summary above the table if a markdown table exists */}
-          {(() => {
-            // Find markdown table
-            const tableRegex = /(\|\s*Name\s*\|[\s\S]*?\n\|---[\s\S]*?)(?=\n\n|$)/;
-            const tableMatch = summary.match(tableRegex);
-            // Responsive font size for table
-            const tableStyle: React.CSSProperties = {
-              marginTop: 18,
-              fontSize: '0.95rem',
-            };
-            if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 600px)').matches) {
-              tableStyle.fontSize = '0.75rem';
-            }
-            if (tableMatch) {
-              const tableMd = tableMatch[0];
-              let summaryMd = summary.replace(tableMd, '').trim();
-              // Remove introductory phrases
-              //summaryMd = summaryMd.replace(/^(Here(?:'s| is) a summary of the tourist-relevant OpenStreetMap data:?|Summary:|Tourist summary:?|Gemini summary:?|Gemini result:?|Tourist information:?|For tourists:?|The following is a summary:?|Below is a summary:?|This is a summary:?|Summary for tourists:?)/i, '').trim();
-              // Always start with 'Summary for Tourists:'
-              summaryMd = `Summary for Tourists:\n\n${summaryMd}`;
-              // Parse table rows
-              const lines = tableMd.split('\n').filter(line => line.trim().startsWith('|'));
-              // Remove header and separator
-              const dataLines = lines.filter((_, i) => i > 1);
-              return (
-                <>
-                  {/* Summary above */}
-                  <div dangerouslySetInnerHTML={{ __html: marked.parse(summaryMd) }} />
-                  {/* Table rows as buttons */}
-                  <div style={tableStyle}>
-                    {dataLines.map((line, idx) => {
-                      const cells = line.split('|').map(cell => cell.trim());
-                      // Expect: | Name | Description | Best For | Insider Tips | Latitude | Longitude |
-                      // cells[1]=Name, cells[2]=Description, cells[3]=Best For, cells[4]=Insider Tips
-                      const name = cells[1] || '';
-                      const description = cells[2] || '';
-                      const bestFor = cells[3] || '';
-                      const insiderTips = cells[4] || '';
-                      const label = `${name}: ${description}${bestFor ? ' | Best for: ' + bestFor : ''}${insiderTips ? ' | Tip: ' + insiderTips : ''}`;
-                      // Omit button if label is empty or only contains a colon
-                      if (!label.trim() || /^:?\s*$/.test(label.trim()) || label.trim() === ':') {
-                        return null;
-                      }
-                      return (
-                        <button
-                          key={idx}
-                          style={{
-                            display: 'block',
-                            width: '100%',
-                            marginBottom: 8,
-                            padding: '10px 12px',
-                            fontSize: tableStyle.fontSize,
-                            background: '#f1f5f9',
-                            color: '#2563eb',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: 8,
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                          }}
-                          onClick={() => {
-                            // You can add custom logic here, e.g. show details, highlight marker, etc.
-                            alert(label);
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              );
-            } else {
-              let summaryMd = summary.trim();
-              summaryMd = summaryMd.replace(/^(Here(?:'s| is) a summary of the tourist-relevant OpenStreetMap data:?|Summary:|Tourist summary:?|Gemini summary:?|Gemini result:?|Tourist information:?|For tourists:?|The following is a summary:?|Below is a summary:?|This is a summary:?|Summary for tourists:?)/i, '').trim();
-              summaryMd = `Summary for Tourists:\n\n${summaryMd}`;
-              return <div dangerouslySetInnerHTML={{ __html: marked.parse(summaryMd) }} />;
-            }
-          })()}
+      <div className="p-4" style={{ fontSize: '0.85rem', overflowWrap: 'anywhere', color: 'black', position: 'relative', paddingBottom: 64 }}>
+        {/* Render summary above the table if a markdown table exists */}
+        {((): React.ReactNode => {
+          // Find markdown table
+          const tableRegex = /\|\s*Name\s*\|[\s\S]*?\n\|---[\s\S]*?(?=\n\n|$)/;
+          const tableMatch = summary.match(tableRegex);
+          // Responsive font size for table
+          const tableStyle: React.CSSProperties = {
+            marginTop: 18,
+            fontSize: '0.95rem',
+          };
+          if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 600px)').matches) {
+            tableStyle.fontSize = '0.75rem';
+          }
+          if (tableMatch) {
+            const tableMd = tableMatch[0];
+            let summaryMd = summary.replace(tableMd, '').trim();
+            summaryMd = `Summary for Tourists:\n\n${summaryMd}`;
+            const lines = tableMd.split('\n').filter(line => line.trim().startsWith('|'));
+            const dataLines = lines.filter((_, i) => i > 1);
+            return (
+              <>
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      (typeof window !== 'undefined' && (window as Window & { marked?: { parse: (md: string) => string } }).marked)
+                        ? (window as Window & { marked?: { parse: (md: string) => string } }).marked!.parse(summaryMd)
+                        : summaryMd.replace(/\n/g, '<br/>'),
+                  }}
+                />
+                <div style={tableStyle}>
+                  {dataLines.map((line, idx) => {
+                    const cells = line.split('|').map(cell => cell.trim());
+                    const name = cells[1] || '';
+                    const description = cells[2] || '';
+                    const bestFor = cells[3] || '';
+                    const insiderTips = cells[4] || '';
+                    const label = `${name}: ${description}${bestFor ? ' | Best for: ' + bestFor : ''}${insiderTips ? ' | Tip: ' + insiderTips : ''}`;
+                    if (!label.trim() || /^:?\s*$/.test(label.trim()) || label.trim() === ':') {
+                      return null;
+                    }
+                    return (
+                      <button
+                        key={idx}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          marginBottom: 8,
+                          padding: '10px 12px',
+                          fontSize: tableStyle.fontSize,
+                          background: '#f1f5f9',
+                          color: '#2563eb',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: 8,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                        }}
+                        onClick={() => {
+                          alert(label);
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          } else if (summary) {
+            let summaryMd = summary.trim();
+            summaryMd = summaryMd.replace(/^(Here(?:'s| is) a summary of the tourist-relevant OpenStreetMap data:?|Summary:|Tourist summary:?|Gemini summary:?|Gemini result:?|Tourist information:?|For tourists:?|The following is a summary:?|Below is a summary:?|This is a summary:?|Summary for tourists:?)/i, '').trim();
+            summaryMd = `Summary for Tourists:\n\n${summaryMd}`;
+            return (
+              <div
+                dangerouslySetInnerHTML={{
+                  __html:
+                    (typeof window !== 'undefined' && (window as Window & { marked?: { parse: (md: string) => string } }).marked)
+                      ? (window as Window & { marked?: { parse: (md: string) => string } }).marked!.parse(summaryMd)
+                      : summaryMd.replace(/\n/g, '<br/>'),
+                }}
+              />
+            );
+          } else {
+            return null;
+          }
+        })()}
+        {/* Bottom action buttons (duplicate of top) */}
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          bottom: 0,
+          width: '100%',
+          background: 'linear-gradient(to top, #fff 90%, rgba(255,255,255,0.0))',
+          padding: '16px 24px 12px 24px',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: 12,
+          borderTop: '1px solid #e5e7eb',
+        }}>
+          <button
+            className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            onClick={() => setTopPanelMinimized(true)}
+          >Minimize</button>
+          <button
+            className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            onClick={() => {
+              setPosition([47.3769, 8.5417]); // Zurich
+              setShowInitModal(true);
+              setTopPanelOpen(false);
+              setPanelOpen(false);
+              setTopPanelMinimized(false);
+              setOsmData(null);
+              setSummary("");
+            }}
+          >Close</button>
         </div>
+      </div>
       </div>
 
       {/* Minimized Gemini summary button at top right */}
@@ -635,12 +785,9 @@ export default function Map() {
                     </Popup>
                   </Marker>
                 ))}
-              {/* Show tile rectangle only after OSM data is loaded, regardless of panel state */}
+              {/* Show tile rectangle(s) only after OSM data is loaded, regardless of panel state */}
               {tileBounds && osmData && osmData.length > 0 && (
-                <>
-                  {/* Highlight the tile bounds with a rectangle */}
-                  <Rectangle bounds={tileBounds} pathOptions={{ color: "red", weight: 2 }} />
-                </>
+                <Rectangle bounds={tileBounds} pathOptions={{ color: "red", weight: 2 }} />
               )}
             </>
           )}
