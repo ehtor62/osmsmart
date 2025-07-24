@@ -75,6 +75,8 @@ type OsmElement = {
 };
 
 export default function Map() {
+  // ...existing state declarations...
+  // (do not declare showGeminiSpinner here)
   const [position, setPosition] = useState<[number, number] | null>(null);
   const [osmData, setOsmData] = useState<OsmElement[] | null>(null);
   const [summary, setSummary] = useState<string>("");
@@ -84,6 +86,7 @@ export default function Map() {
   const [topPanelMinimized, setTopPanelMinimized] = useState<boolean>(false);
   const [showInitModal, setShowInitModal] = useState<boolean>(true);
   const [shouldFetchOsm, setShouldFetchOsm] = useState<boolean>(false);
+  const [showSpinner, setShowSpinner] = useState<boolean>(false);
   const zoomLevel = 16;
 
   // On load, center on Zurich only, do not open panel
@@ -94,28 +97,29 @@ export default function Map() {
 
   // Function to trigger geolocation search and OSM fetch
   const handleFindLocation = () => {
+    setShowInitModal(false);
+    setShowSpinner(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude, pos.coords.longitude]);
-          setShowInitModal(false);
+          // For testing: add 1 to latitude
+          setPosition([pos.coords.latitude + 6.2, pos.coords.longitude+1.4]);
           setShouldFetchOsm(true);
         },
         () => {
           setPosition([47.3769, 8.5417]); // fallback: Zurich
-          setShowInitModal(false);
           setShouldFetchOsm(true);
         }
       );
     } else {
       setPosition([47.3769, 8.5417]); // fallback: Zurich
-      setShowInitModal(false);
       setShouldFetchOsm(true);
     }
   };
 
   useEffect(() => {
     if (shouldFetchOsm && position) {
+      setShowSpinner(false); // Hide spinner when position is set and OSM fetch starts
       // Fetch OSM data from API
       fetch(`/api/tile?lat=${position[0]}&lng=${position[1]}`)
         .then(async (res) => {
@@ -129,21 +133,27 @@ export default function Map() {
               // Only keep elements with tags, not of type 'way', and not natural: tree
               // List of keywords to filter out
               const omitKeywords = [
-                "bonnet", "emergency", "crossing", "barrier", "bus", "couplings", "direction", "camera", "highway", "defibrillator", "public_transport",
-                "amenity: bench", "amenity: drinking_water", "amenity: parking_entrance", "amenity: bank", "amenity: parking", "amenity: waste_disposal",
-                "amenity: bicycle_parking", "amenity: taxi", "amenity: bureau_de_change", "amenity: fast_food", "amenity: vending_machine", "amenity: waste_basket",
+                "bonnet", "power", "entrance", "healthcare", "traffic_calming", "railway", "emergency", "access", "crossing", "barrier", "bus", "couplings", "direction", "camera", "highway", "defibrillator", "public_transport",
+                "amenity: bench", "amenity: drinking_water", "amenity: parking_entrance", "amenity: bank", "amenity: parking", "amenity: waste_disposal", "office: lawyer", 
+                "amenity: bicycle_parking", "office: energy_supplier", "amenity: social_facility", "amenity: kindergarten", "amenity: veterinary", "amenity: pharmacy", "amenity: charging_station", "amenity: post_office", "amenity: atm", "amenity: taxi", "amenity: bureau_de_change", "amenity: doctors", "amenity: dentist", "amenity: fast_food", "amenity: vending_machine", "amenity: waste_basket",
                 "amenity: post_box", "amenity: compressed_air", "amenity: toilets", "amenity: recycling"
               ];
               setOsmData(
                 data.elements
                   .filter((el: OsmElement) => {
                     if (!el.tags || Object.keys(el.tags).length === 0) return false;
-                    if (el.type === 'way' || el.type === 'route' || el.type === 'relation') return false;
-                    if (el.tags["natural"] === "tree") return false;
                     // Omit if any tag key or key:value matches omitKeywords
                     for (const [k, v] of Object.entries(el.tags)) {
                       if (omitKeywords.includes(k)) return false;
                       if (omitKeywords.includes(`${k}: ${v}`)) return false;
+                      // Omit if tag key starts with 'TMC:' (case-insensitive)
+                      if (k.toLowerCase().startsWith('tmc:')) return false;
+                      // Omit if tag is 'natural: tree' (case-insensitive)
+                      if (k.toLowerCase() === 'natural' && v.toLowerCase() === 'tree') return false;
+                      // Omit if tag is 'man_made: surveillance' (case-insensitive)
+                      if (k.toLowerCase() === 'man_made' && v.toLowerCase() === 'surveillance') return false;
+                      // Omit if tag is 'public_transport:version: 2' (case-insensitive)
+                      if (k.toLowerCase() === 'public_transport:version' && v.toLowerCase() === '2') return false;
                     }
                     // Omit if exactly 5 addr:* fields
                     const addrCount = Object.keys(el.tags).filter(key => key.startsWith('addr:')).length;
@@ -216,10 +226,80 @@ export default function Map() {
     console.log('No Gemini markers found. Summary:', summary);
   }
 
+  // Spinner overlay for Gemini summary (must be after state declarations)
+  const showGeminiSpinner = loadingSummary && !topPanelOpen;
+
   return (
-    <div className="w-screen h-screen flex flex-row" style={{ position: 'relative' }}>
-      {/* Initial modal overlay */}
-      {showInitModal && (
+    <>
+      {/* Spinner overlay for Gemini summary */}
+      {showGeminiSpinner && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(30, 41, 59, 0.25)',
+            zIndex: 7000,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div style={{
+            border: '6px solid #e5e7eb',
+            borderTop: '6px solid #2563eb',
+            borderRadius: '50%',
+            width: 64,
+            height: 64,
+            animation: 'spin 1s linear infinite',
+            marginBottom: 24,
+          }} />
+          <div style={{ color: '#2563eb', fontWeight: 600, fontSize: '1.15rem', letterSpacing: 0.5 }}>asking local guides…</div>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
+      {showSpinner ? (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(30, 41, 59, 0.25)',
+            zIndex: 6000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div style={{
+            border: '6px solid #e5e7eb',
+            borderTop: '6px solid #2563eb',
+            borderRadius: '50%',
+            width: 64,
+            height: 64,
+            animation: 'spin 1s linear infinite',
+          }} />
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      ) : null}
+      <div className="w-screen h-screen flex flex-row" style={{ position: 'relative' }}>
+        {/* Initial modal overlay */}
+        {showInitModal && (
         <div
           style={{
             position: 'fixed',
@@ -359,12 +439,8 @@ export default function Map() {
                   {el.lat !== undefined && el.lon !== undefined && (
                     <div className="text-xs text-gray-700">lat: {el.lat}, lon: {el.lon}</div>
                   )}
-                  {el.nodes && el.nodes.length > 0 && (
-                    <div className="text-xs text-gray-700">nodes: [{el.nodes.join(", ")}]</div>
-                  )}
-                  {el.members && el.members.length > 0 && (
-                    <div className="text-xs text-gray-700">members: [{el.members.map(m => `${m.type}#${m.ref} (${m.role})`).join(", ")}]</div>
-                  )}
+                  {/* Omit rendering nodes: [...] */}
+                  {/* Omit rendering members: [...] */}
                 </li>
               ))
             ) : (
@@ -398,7 +474,15 @@ export default function Map() {
             >Minimize</button>
             <button
               className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-              onClick={() => setTopPanelOpen(false)}
+              onClick={() => {
+                setPosition([47.3769, 8.5417]); // Zurich
+                setShowInitModal(true);
+                setTopPanelOpen(false);
+                setPanelOpen(false);
+                setTopPanelMinimized(false);
+                setOsmData(null);
+                setSummary("");
+              }}
             >Close</button>
             
           </div>
@@ -562,6 +646,7 @@ export default function Map() {
           )}
         </MapContainer>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
