@@ -236,6 +236,57 @@ export default function Map() {
   const geminiMarkers = summary ? parseGeminiMarkers(summary) : [];
   const showGeminiSpinner = loadingSummary && !topPanelOpen;
 
+  // State for left-side Gemini fact report panel
+  const [leftPanelOpen, setLeftPanelOpen] = useState(false);
+  const [leftPanelContent, setLeftPanelContent] = useState("");
+  const [leftPanelLoading, setLeftPanelLoading] = useState(false);
+
+  // Handler for Gemini fact report (left panel)
+  const onAskFactReport = async (label: string) => {
+    const prompt = `Write a detailed, fact-based report about the following place. Consult Wikipedia and only use facts that can be verified there. Do not repeat the input content. Do not use any tabular format or markdown table in your output. Only provide a narrative report. Go beyond the provided information and provide unique, deeply researched insights about this place: ${label}`;
+    console.debug('[Gemini Fact Report] Prompt sent to Gemini:', prompt);
+    // Try to find the OSM element that matches the label (by name and description)
+    let element = null;
+    if (osmData && Array.isArray(osmData)) {
+      // Try to extract the name and description from the label
+      // label format: Name: Description | Best for: ... | Tip: ...
+      const nameMatch = label.match(/^([^:]+):/);
+      const descMatch = label.match(/^([^:]+):\s*([^|]+)/);
+      const name = nameMatch ? nameMatch[1].trim() : null;
+      const description = descMatch ? descMatch[2].trim() : null;
+      element = osmData.find(el => {
+        const elName = el.tags?.name?.trim();
+        const elDesc = el.tags?.description?.trim();
+        // Try to match name and description if available
+        if (name && elName && name === elName) {
+          if (!description) return true;
+          if (elDesc && elDesc.startsWith(description)) return true;
+        }
+        // Fallback: match just name
+        if (name && elName && name === elName) return true;
+        return false;
+      });
+    }
+    setLeftPanelOpen(true);
+    setLeftPanelLoading(true);
+    setLeftPanelContent("");
+    try {
+      const response = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          relevantData: element ? [element] : [],
+          prompt,
+        }),
+      });
+      const result = await response.json();
+      setLeftPanelContent(result.answer || "No summary available.");
+    } catch {
+      setLeftPanelContent("Error retrieving summary.");
+    }
+    setLeftPanelLoading(false);
+  };
+
   return (
     <>
       {/* Spinner overlay for Gemini summary */}
@@ -357,7 +408,42 @@ export default function Map() {
             setOsmData(null);
             setSummary("");
           }}
+          onAskFactReport={onAskFactReport}
         />
+      {/* Left-side sliding panel for Gemini fact report */}
+      {leftPanelOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: 400,
+            maxWidth: '90vw',
+            height: '100vh',
+            background: '#fff',
+            boxShadow: '2px 0 16px rgba(0,0,0,0.12)',
+            zIndex: 8000,
+            transition: 'left 0.3s cubic-bezier(.4,0,.2,1)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{ padding: '18px 20px 10px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 700, fontSize: '1.1rem', color: '#2563eb' }}>Gemini Fact Report</span>
+            <button
+              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 16px', fontWeight: 600, cursor: 'pointer' }}
+              onClick={() => setLeftPanelOpen(false)}
+            >Close</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20, fontSize: '0.98rem', color: '#222' }}>
+            {leftPanelLoading ? (
+              <div style={{ color: '#2563eb', fontWeight: 600, fontSize: '1.05rem', marginTop: 40 }}>Loading Gemini report…</div>
+            ) : (
+              <div style={{ whiteSpace: 'pre-line' }}>{leftPanelContent}</div>
+            )}
+          </div>
+        </div>
+      )}
         <div className="flex-1 h-full">
           <MapContainer
             center={position || [47.3769, 8.5417]}

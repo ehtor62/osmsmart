@@ -6,6 +6,7 @@ interface GeminiSummaryPanelProps {
   minimized: boolean;
   onMinimize: () => void;
   onClose: () => void;
+  onAskFactReport?: (label: string) => void;
 }
 
 const GeminiSummaryPanel: React.FC<GeminiSummaryPanelProps> = ({
@@ -14,6 +15,7 @@ const GeminiSummaryPanel: React.FC<GeminiSummaryPanelProps> = ({
   minimized,
   onMinimize,
   onClose,
+  onAskFactReport,
 }) => {
   // Responsive font size for table
   const getTableStyle = () => {
@@ -82,7 +84,13 @@ const GeminiSummaryPanel: React.FC<GeminiSummaryPanelProps> = ({
                     }}
                     title="Ask more about this place"
                     onClick={() => {
-                      alert('Ask more about this place: ' + label);
+                      // Debug: log the label being sent to Gemini
+                      console.debug('GeminiSummaryPanel: Question mark clicked for label:', label);
+                      if (typeof onAskFactReport === 'function') {
+                        onAskFactReport(label);
+                      } else {
+                        alert('No onAskFactReport handler provided.');
+                      }
                     }}
                   >
                     ?
