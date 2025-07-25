@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createClient } from "@libsql/client";
 
 const turso = createClient({
+  
   url: process.env.TURSO_DATABASE_URL!,
   authToken: process.env.TURSO_AUTH_TOKEN!,
 });
@@ -29,7 +30,13 @@ interface OSMData {
   [key: string]: unknown;
 }
 function processOsmData(osmData: OSMData): OSMData {
-  return osmData;
+  // Filter out elements with exactly one key
+  const filteredElements = Array.isArray(osmData.elements)
+    ? osmData.elements.filter((el) =>
+        el && typeof el === "object" && Object.keys(el).length !== 1
+      )
+    : [];
+  return { ...osmData, elements: filteredElements };
 }
 
 export async function GET(req: NextRequest) {

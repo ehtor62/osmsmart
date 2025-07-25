@@ -35,16 +35,6 @@ function parseGeminiMarkers(summary: string): Array<{ name: string; description:
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-const markerIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
 const redMarkerIcon = L.icon({
   iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
   iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
@@ -142,13 +132,7 @@ export default function Map() {
         return [lat, lon];
       }
 
-      const omitKeywords = [
-        "bonnet", "power", "admin_level", "entrance", "healthcare", "traffic_calming", "railway", "emergency", "access", "crossing", "barrier", "bus", "couplings", "direction", "camera", "highway", "defibrillator", "public_transport",
-        "amenity: bench", "amenity: drinking_water", "amenity: parking_entrance", "amenity: bank", "amenity: parking", "amenity: waste_disposal", "office: lawyer", 
-        "amenity: bicycle_parking", "office: energy_supplier", "amenity: social_facility", "amenity: kindergarten", "amenity: veterinary", "amenity: pharmacy", "amenity: charging_station", "amenity: post_office", "amenity: atm", "amenity: taxi", "amenity: bureau_de_change", "amenity: doctors", "amenity: dentist", "amenity: fast_food", "amenity: vending_machine", "amenity: waste_basket",
-        "amenity: post_box", "amenity: compressed_air", "amenity: toilets", "amenity: recycling"
-      ];
-
+      
       // Debug: log the position used for tile calculation
       console.log('OSM fetch: using position', position);
 
@@ -207,23 +191,176 @@ export default function Map() {
         // OSM ids are only unique within their type, so use type+id as key
         const seen = new Set<string>();
         const filtered = allElements.filter((el) => {
+          // Only deduplicate by type+id, and filter for specific tags
           if (el.id == null || el.type == null) return false;
           const key = `${el.type}:${el.id}`;
           if (seen.has(key)) return false;
           seen.add(key);
-          if (!el.tags || Object.keys(el.tags).length === 0) return false;
+
+          // List of allowed tags and key-value pairs
+          const allowedTags = new Set([
+            'aerialway',
+            'aeroway:aerodrome',
+            'aeroway:helipad',
+            'aeroway:heliport',
+            'aeroway:spaceport',
+            'aeroway:terminal',
+            'amenity:bar',
+            'amenity:biergarten',
+            'amenity:café',
+            'amenity:fast_food',
+            'amenity:food_court',
+            'amenity:ice_cream',
+            'amenity:pub',
+            'amenity:restaurant',
+            'amenity:surf_school',
+            'amenity:library',
+            'amenity:bicycle_rental',
+            'amenity:boat_rental',
+            'amenity:bus_station',
+            'amenity:car_rental',
+            'amenity:ferry_terminal',
+            'amenity:taxi',
+            'amenity:bureau_de_change',
+            'amenity:money_transfer',
+            'amenity:arts_centre',
+            'amenity:casino',
+            'amenity:cinema',
+            'amenity:community_centre',
+            'amenity:events_venue',
+            'amenity:exhibition_centre',
+            'amenity:fountain',
+            'amenity:music_venue',
+            'amenity:nightclub',
+            'amenity:planetarium',
+            'amenity:stage',
+            'amenity:social_centre',
+            'amenity:theatre',
+            'amenity:ranger_station',
+            'amenity:bbq',
+            'amenity:dive_centre',
+            'amenity:internet_cafe',
+            'amenity:kneipp_water_cure',
+            'amenity:marketplace',
+            'amenity:monastery',
+            'amenity:place_of_worship',
+            'amenity:public_bath',
+            'barrier:city_wall',
+            'barrier:border_control',
+            'boundary:aboriginal_lands',
+            'boundary:hazard',
+            'boundary:limited_traffic_zone',
+            'boundary:low_emission_zone',
+            'boundary:national_park',
+            'boundary:protected_area',
+            'boundary:timezone',
+            'building:cathedral',
+            'building:church',
+            'building:kingdom_hall',
+            'building:monastery',
+            'building:mosque',
+            'building:synagogue',
+            'building:temple',
+            'building:bridge',
+            'building:museum',
+            'building:train_station',
+            'building:stadium',
+            'building:beach_hut',
+            'building:castle',
+            'building:ship',
+            'building:triumphal_arch',
+            'craft:winery',
+            'geological:volcanic_caldera_rim',
+            'geological:volcanic_lava_field',
+            'geological:volcanic_vent',
+            'geological:columnar_jointing',
+            'geological:hoodoo',
+            'geological:dyke',
+            'geological:tor',
+            'geological:inselberg',
+            'mountain_pass:yes',
+            'highway:hitchhiking',
+            'historic:aircraft',
+            'historic:aqueduct',
+            'historic:archaeological_site',
+            'historic:building',
+            'historic:castle',
+            'historic:castle_wall',
+            'historic:church',
+            'historic:city_gate',
+            'historic:citywalls',
+            'historic:district',
+            'historic:farm',
+            'historic:fort',
+            'historic:house',
+            'historic:locomotive',
+            'historic:manor',
+            'historic:monastery',
+            'historic:mine',
+            'historic:monument',
+            'historic:mosque',
+            'historic:road',
+            'historic:ruins',
+            'historic:ship',
+            'historic:temple',
+            'historic:tomb',
+            'historic:tower',
+            'historic:wreck',
+            'landuse:vineyard',
+            'landuse:salt_pond',
+            'landuse:winter_sports',
+            'leisure:beach_resort',
+            'leisure:bird_hide',
+            'leisure:garden',
+            'leisure:ice_rink',
+            'leisure:marina',
+            'leisure:miniature_golf',
+            'leisure:nature_reserve',
+            'leisure:stadium',
+            'leisure:water_park',
+            'man_made:lighthouse',
+            'man_made:observatory',
+            'man_made:pier',
+            'man_made:watermill',
+            'man_made:windmill',
+            'natural:beach',
+            'natural:blowhole',
+            'natural:geyser',
+            'natural:glacier',
+            'natural:hot_spring',
+            'natural:isthmus',
+            'natural:arch',
+            'natural:cave_entrance',
+            'natural:cliff',
+            'natural:dune',
+            'natural:fumarole',
+            'natural:volcano',
+            'office:guide',
+            'office:harbour_master',
+            'railway:funicular',
+            'shop:ice_cream',
+            'shop:mall',
+            'tourism:alpine_hut',
+            'tourism:aquarium',
+            'tourism:artwork',
+            'tourism:attraction',
+            'tourism:gallery',
+            'tourism:museum',
+            'tourism:theme_park',
+            'tourism:viewpoint',
+            'tourism:zoo',
+            'tourism:yes',
+            'waterway:waterfall',
+          ]);
+
+          if (!el.tags) return false;
           for (const [k, v] of Object.entries(el.tags)) {
-            if (omitKeywords.includes(k)) return false;
-            if (omitKeywords.includes(`${k}: ${v}`)) return false;
-            if (k.toLowerCase().startsWith('tmc:')) return false;
-            if (k.toLowerCase() === 'natural' && v.toLowerCase() === 'tree') return false;
-            if (k.toLowerCase() === 'man_made' && v.toLowerCase() === 'surveillance') return false;
-            if (k.toLowerCase() === 'public_transport:version' && v.toLowerCase() === '2') return false;
-            if (k.toLowerCase() === 'public_transport:version' && v.toLowerCase() === '1') return false;
+            // Check for key-only match (e.g., aerialway)
+            if (allowedTags.has(k)) return true;
+            // Check for key-value match (e.g., amenity:bar)
+            if (allowedTags.has(`${k}:${v}`)) return true;
           }
-          const addrCount = Object.keys(el.tags).filter(key => key.startsWith('addr:')).length;
-          if (addrCount === 5) return false;
-          return true;
+          return false;
         });
         console.log('Filtered OSM elements (to display):', filtered);
         setOsmData(filtered);
@@ -641,6 +778,9 @@ export default function Map() {
                     if (!label.trim() || /^:?\s*$/.test(label.trim()) || label.trim() === ':') {
                       return null;
                     }
+                    // Add row number to the label
+                    const rowNumber = idx + 1;
+                    const numberedLabel = `${rowNumber}. ${label}`;
                     return (
                       <button
                         key={idx}
@@ -662,7 +802,7 @@ export default function Map() {
                           alert(label);
                         }}
                       >
-                        {label}
+                        {numberedLabel}
                       </button>
                     );
                   })}
@@ -774,17 +914,27 @@ export default function Map() {
               </Marker>
               {geminiMarkers
                 .filter(marker => marker.name?.trim() || marker.description?.trim())
-                .map((marker, idx) => (
-                  <Marker key={idx} position={[marker.lat, marker.lon]} icon={markerIcon}>
-                    <Popup>
-                      <div style={{ maxWidth: 300 }}>
-                        <div className="font-bold mb-1">{marker.name}</div>
-                        <div>{marker.description}</div>
-                        <div className="text-xs text-gray-700">lat: {marker.lat}, lon: {marker.lon}</div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                .map((marker, idx) => {
+                  // Create a numbered divIcon for each marker
+                  const numberIcon = L.divIcon({
+                    className: 'numbered-marker',
+                    html: `<div style="background:#2563eb;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.10);">${idx + 1}</div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 32],
+                    popupAnchor: [0, -32],
+                  });
+                  return (
+                    <Marker key={idx} position={[marker.lat, marker.lon]} icon={numberIcon}>
+                      <Popup>
+                        <div style={{ maxWidth: 300 }}>
+                          <div className="font-bold mb-1">{marker.name}</div>
+                          <div>{marker.description}</div>
+                          <div className="text-xs text-gray-700">lat: {marker.lat}, lon: {marker.lon}</div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
               {/* Show tile rectangle(s) only after OSM data is loaded, regardless of panel state */}
               {tileBounds && osmData && osmData.length > 0 && (
                 <Rectangle bounds={tileBounds} pathOptions={{ color: "red", weight: 2 }} />
