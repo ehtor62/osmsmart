@@ -2,10 +2,10 @@ import React from "react";
 
 interface InitialModalProps {
   show: boolean;
-  cityMode: 'inside' | 'outside';
+  cityMode: 'city center' | 'suburban' | 'countryside';
   onFindLocation: () => void;
   onClose: () => void;
-  onToggleCityMode: () => void;
+  onToggleCityMode: (mode: 'city center' | 'suburban' | 'countryside') => void;
 }
 
 const InitialModal: React.FC<InitialModalProps> = ({ show, cityMode, onFindLocation, onClose, onToggleCityMode }) => {
@@ -90,52 +90,62 @@ const InitialModal: React.FC<InitialModalProps> = ({ show, cityMode, onFindLocat
             I have a specific interest
           </button>
         </div>
-        {/* Toggle for inside/outside city */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
-          <div
+        {/* Mode selection buttons */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10, gap: 16 }}>
+          <button
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              userSelect: 'none',
+              padding: '8px 20px',
+              background: cityMode === 'city center' ? '#2563eb' : '#e5e7eb',
+              color: cityMode === 'city center' ? '#fff' : '#2563eb',
+              border: cityMode === 'city center' ? '2px solid #2563eb' : '2px solid #e5e7eb',
+              borderRadius: 8,
+              fontWeight: 600,
+              fontSize: '1rem',
+              cursor: 'pointer',
+              boxShadow: cityMode === 'city center' ? '0 2px 8px rgba(37,99,235,0.10)' : 'none',
+              transition: 'background 0.2s',
+              minWidth: 120,
             }}
+            onClick={() => { if (cityMode !== 'city center') onToggleCityMode('city center'); }}
           >
-            <span style={{ color: cityMode === 'inside' ? '#2563eb' : '#64748b', fontWeight: 600, fontSize: '0.98rem', minWidth: 70, textAlign: 'right' }}>inside city</span>
-            <div
-              role="switch"
-              aria-checked={cityMode === 'outside'}
-              tabIndex={0}
-              onClick={onToggleCityMode}
-              onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') onToggleCityMode(); }}
-              style={{
-                width: 54,
-                height: 28,
-                borderRadius: 16,
-                background: cityMode === 'outside' ? '#2563eb' : '#e5e7eb',
-                position: 'relative',
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-                outline: 'none',
-                border: cityMode === 'outside' ? '2px solid #2563eb' : '2px solid #e5e7eb',
-                boxShadow: cityMode === 'outside' ? '0 2px 8px rgba(37,99,235,0.10)' : 'none',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 3,
-                  left: cityMode === 'inside' ? 3 : 23,
-                  width: 22,
-                  height: 22,
-                  borderRadius: '50%',
-                  background: '#fff',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                  transition: 'left 0.2s',
-                }}
-              />
-            </div>
-            <span style={{ color: cityMode === 'outside' ? '#2563eb' : '#64748b', fontWeight: 600, fontSize: '0.98rem', minWidth: 80, textAlign: 'left' }}>outside city</span>
-          </div>
+            City Center
+          </button>
+          <button
+            style={{
+              padding: '8px 20px',
+              background: cityMode === 'suburban' ? '#2563eb' : '#e5e7eb',
+              color: cityMode === 'suburban' ? '#fff' : '#2563eb',
+              border: cityMode === 'suburban' ? '2px solid #2563eb' : '2px solid #e5e7eb',
+              borderRadius: 8,
+              fontWeight: 600,
+              fontSize: '1rem',
+              cursor: 'pointer',
+              boxShadow: cityMode === 'suburban' ? '0 2px 8px rgba(37,99,235,0.10)' : 'none',
+              transition: 'background 0.2s',
+              minWidth: 120,
+            }}
+            onClick={() => { if (cityMode !== 'suburban') onToggleCityMode('suburban'); }}
+          >
+            Suburban
+          </button>
+          <button
+            style={{
+              padding: '8px 20px',
+              background: cityMode === 'countryside' ? '#2563eb' : '#e5e7eb',
+              color: cityMode === 'countryside' ? '#fff' : '#2563eb',
+              border: cityMode === 'countryside' ? '2px solid #2563eb' : '2px solid #e5e7eb',
+              borderRadius: 8,
+              fontWeight: 600,
+              fontSize: '1rem',
+              cursor: 'pointer',
+              boxShadow: cityMode === 'countryside' ? '0 2px 8px rgba(37,99,235,0.10)' : 'none',
+              transition: 'background 0.2s',
+              minWidth: 120,
+            }}
+            onClick={() => { if (cityMode !== 'countryside') onToggleCityMode('countryside'); }}
+          >
+            Countryside
+          </button>
         </div>
       </div>
     </div>

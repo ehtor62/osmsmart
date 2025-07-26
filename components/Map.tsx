@@ -70,7 +70,7 @@ const redMarkerIcon = L.icon({
 
 export default function Map() {
   // City/countryside toggle state
-  const [cityMode, setCityMode] = useState<'inside' | 'outside'>('inside');
+  const [cityMode, setCityMode] = useState<'city center' | 'suburban' | 'countryside'>('city center');
   const [position, setPosition] = useState<[number, number] | null>(null);
   const [osmData, setOsmData] = useState<OsmElement[] | null>(null);
   const [summary, setSummary] = useState<string>("");
@@ -81,7 +81,8 @@ export default function Map() {
   const [showInitModal, setShowInitModal] = useState<boolean>(true);
   const [shouldFetchOsm, setShouldFetchOsm] = useState<boolean>(false);
   const [showSpinner, setShowSpinner] = useState<boolean>(false);
-  const zoomLevel = 16;
+  // Always use zoom 17 for tile calculations as per user request
+  const zoomLevel = 17;
 
   // On load, center on Zurich only, do not open panel
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude+2.59, pos.coords.longitude]);
+          setPosition([pos.coords.latitude, pos.coords.longitude]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -124,85 +125,57 @@ export default function Map() {
       // Debug: log the position used for tile calculation
       // ...existing code...
       const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
-      if (cityMode === 'inside') {
-        // Single tile request
-        fetch(`/api/tile?lat=${position[0]}&lng=${position[1]}`)
-          .then(async (res) => {
-            if (!res.ok) return [];
-            try {
-              const data = await res.json();
-              return data && data.elements ? data.elements : [];
-            } catch {
-              return [];
-            }
-          })
-          .then((elements) => {
-            const seen = new Set<string>();
-            const filtered = elements.filter((el: OsmElement) => {
-              if (el.id == null || el.type == null) return false;
-              const key = `${el.type}:${el.id}`;
-              if (seen.has(key)) return false;
-              seen.add(key);
-              if (!el.tags) return false;
-              for (const [k, v] of Object.entries(el.tags)) {
-                if (allowedTags.has(k)) return true;
-                if (allowedTags.has(`${k}:${v}`)) return true;
-              }
-              return false;
-            });
-            setOsmData(filtered);
-            setPanelOpen(true);
-          })
-          .catch(() => {
-            setOsmData([]);
-            setPanelOpen(true);
-          });
-      } else {
-        // Single bounding box request for 9 tiles
-        let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-        for (let dx = -1; dx <= 1; dx++) {
-          for (let dy = -1; dy <= 1; dy++) {
-            const x = xtile + dx;
-            const y = ytile + dy;
-            const [[lat1, lng1], [lat2, lng2]] = getTileBoundsXY(x, y, zoomLevel);
-            minLat = Math.min(minLat, lat1, lat2);
-            maxLat = Math.max(maxLat, lat1, lat2);
-            minLng = Math.min(minLng, lng1, lng2);
-            maxLng = Math.max(maxLng, lng1, lng2);
-          }
-        }
-        fetch(`/api/tile?minLat=${minLat}&minLng=${minLng}&maxLat=${maxLat}&maxLng=${maxLng}`)
-          .then(async (res) => {
-            if (!res.ok) return [];
-            try {
-              const data = await res.json();
-              return data && data.elements ? data.elements : [];
-            } catch {
-              return [];
-            }
-          })
-          .then((elements) => {
-            const seen = new Set<string>();
-            const filtered = elements.filter((el: OsmElement) => {
-              if (el.id == null || el.type == null) return false;
-              const key = `${el.type}:${el.id}`;
-              if (seen.has(key)) return false;
-              seen.add(key);
-              if (!el.tags) return false;
-              for (const [k, v] of Object.entries(el.tags)) {
-                if (allowedTags.has(k)) return true;
-                if (allowedTags.has(`${k}:${v}`)) return true;
-              }
-              return false;
-            });
-            setOsmData(filtered);
-            setPanelOpen(true);
-          })
-          .catch(() => {
-            setOsmData([]);
-            setPanelOpen(true);
-          });
+      let range = 1; // default: city center (3x3)
+      if (cityMode === 'city center') {
+        range = 1;
+      } else if (cityMode === 'suburban') {
+        range = 2; // 5x5
+      } else if (cityMode === 'countryside') {
+        range = 4; // 9x9
       }
+      let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+      for (let dx = -range; dx <= range; dx++) {
+        for (let dy = -range; dy <= range; dy++) {
+          const x = xtile + dx;
+          const y = ytile + dy;
+          const [[lat1, lng1], [lat2, lng2]] = getTileBoundsXY(x, y, zoomLevel);
+          minLat = Math.min(minLat, lat1, lat2);
+          maxLat = Math.max(maxLat, lat1, lat2);
+          minLng = Math.min(minLng, lng1, lng2);
+          maxLng = Math.max(maxLng, lng1, lng2);
+        }
+      }
+      fetch(`/api/tile?minLat=${minLat}&minLng=${minLng}&maxLat=${maxLat}&maxLng=${maxLng}`)
+        .then(async (res) => {
+          if (!res.ok) return [];
+          try {
+            const data = await res.json();
+            return data && data.elements ? data.elements : [];
+          } catch {
+            return [];
+          }
+        })
+        .then((elements) => {
+          const seen = new Set<string>();
+          const filtered = elements.filter((el: OsmElement) => {
+            if (el.id == null || el.type == null) return false;
+            const key = `${el.type}:${el.id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            if (!el.tags) return false;
+            for (const [k, v] of Object.entries(el.tags)) {
+              if (allowedTags.has(k)) return true;
+              if (allowedTags.has(`${k}:${v}`)) return true;
+            }
+            return false;
+          });
+          setOsmData(filtered);
+          setPanelOpen(true);
+        })
+        .catch(() => {
+          setOsmData([]);
+          setPanelOpen(true);
+        });
       setShouldFetchOsm(false);
     }
   }, [shouldFetchOsm, position, cityMode]);
@@ -230,26 +203,30 @@ export default function Map() {
       return { xtile, ytile };
     };
     const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
-    if (cityMode === 'inside') {
-      tileBounds = getTileBoundsXY(xtile, ytile, zoomLevel);
-    } else {
-      let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const x = xtile + dx;
-          const y = ytile + dy;
-          const [[lat1, lng1], [lat2, lng2]] = getTileBoundsXY(x, y, zoomLevel);
-          minLat = Math.min(minLat, lat1, lat2);
-          maxLat = Math.max(maxLat, lat1, lat2);
-          minLng = Math.min(minLng, lng1, lng2);
-          maxLng = Math.max(maxLng, lng1, lng2);
-        }
-      }
-      tileBounds = [
-        [minLat, minLng],
-        [maxLat, maxLng],
-      ];
+    let range = 1; // default: city center (3x3)
+    if (cityMode === 'city center') {
+      range = 1;
+    } else if (cityMode === 'suburban') {
+      range = 2; // 5x5
+    } else if (cityMode === 'countryside') {
+      range = 4; // 9x9
     }
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    for (let dx = -range; dx <= range; dx++) {
+      for (let dy = -range; dy <= range; dy++) {
+        const x = xtile + dx;
+        const y = ytile + dy;
+        const [[lat1, lng1], [lat2, lng2]] = getTileBoundsXY(x, y, zoomLevel);
+        minLat = Math.min(minLat, lat1, lat2);
+        maxLat = Math.max(maxLat, lat1, lat2);
+        minLng = Math.min(minLng, lng1, lng2);
+        maxLng = Math.max(maxLng, lng1, lng2);
+      }
+    }
+    tileBounds = [
+      [minLat, minLng],
+      [maxLat, maxLng],
+    ];
   }
 
   const geminiMarkers = summary ? parseGeminiMarkers(summary) : [];
@@ -380,7 +357,7 @@ export default function Map() {
           cityMode={cityMode}
           onFindLocation={handleFindLocation}
           onClose={() => setShowInitModal(false)}
-          onToggleCityMode={() => setCityMode(cityMode === 'inside' ? 'outside' : 'inside')}
+          onToggleCityMode={(mode) => setCityMode(mode)}
         />
         <OsmDataPanel
           open={panelOpen}
