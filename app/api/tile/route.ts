@@ -7,10 +7,10 @@ const turso = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN!,
 });
 
-// Helper: Calculate bounding box for a tile (simple example for z=13)
+// Helper: Calculate bounding box for a tile (zoom = 17)
 function calculateBoundingBox(lat: number, lng: number) {
   // Use a larger delta for zoom 17 to ensure OSM data is present
-  const delta = 0.002; // smaller box for high zoom, but larger than before
+  const delta = 0.002; // adjust as needed for zoom 17
   return {
     minLat: lat - delta,
     minLng: lng - delta,
@@ -42,13 +42,25 @@ function processOsmData(osmData: OSMData): OSMData {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const lat = parseFloat(searchParams.get("lat") || "");
-    const lng = parseFloat(searchParams.get("lng") || "");
-    if (isNaN(lat) || isNaN(lng)) {
-      return new Response(JSON.stringify({ error: "Missing or invalid lat/lng" }), { status: 400 });
+    const minLat = parseFloat(searchParams.get("minLat") || "");
+    const minLng = parseFloat(searchParams.get("minLng") || "");
+    const maxLat = parseFloat(searchParams.get("maxLat") || "");
+    const maxLng = parseFloat(searchParams.get("maxLng") || "");
+    let bbox;
+    let tile_id;
+    if (!isNaN(minLat) && !isNaN(minLng) && !isNaN(maxLat) && !isNaN(maxLng)) {
+      // Use bounding box from query
+      bbox = { minLat, minLng, maxLat, maxLng };
+      tile_id = `bbox_${minLat.toFixed(5)}_${minLng.toFixed(5)}_${maxLat.toFixed(5)}_${maxLng.toFixed(5)}_z17`;
+    } else {
+      const lat = parseFloat(searchParams.get("lat") || "");
+      const lng = parseFloat(searchParams.get("lng") || "");
+      if (isNaN(lat) || isNaN(lng)) {
+        return new Response(JSON.stringify({ error: "Missing or invalid lat/lng or bounding box" }), { status: 400 });
+      }
+      bbox = calculateBoundingBox(lat, lng);
+      tile_id = `tile_${lat.toFixed(5)}_${lng.toFixed(5)}_z17`;
     }
-
-    const tile_id = `tile_${lat.toFixed(5)}_${lng.toFixed(5)}_z13`;
 
     // 1. Check Turso for cached tile
     const cached = await turso.execute("SELECT data FROM tiles WHERE id = ?", [tile_id]);
@@ -66,7 +78,6 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Cache MISS: Generate tile
-    const bbox = calculateBoundingBox(lat, lng);
     const bboxStr = bboxString(bbox);
     const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];(node(${bboxStr});way(${bboxStr});relation(${bboxStr}););out;`;
     const overpassRes = await fetch(overpassUrl);

@@ -96,7 +96,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude, pos.coords.longitude]);
+          setPosition([pos.coords.latitude+2.59, pos.coords.longitude]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -121,69 +121,88 @@ export default function Map() {
         );
         return { xtile, ytile };
       }
-      function tileToLatLng(xtile: number, ytile: number, zoom: number): [number, number] {
-        const n = Math.pow(2, zoom);
-        const lon = (xtile + 0.5) / n * 360 - 180;
-        const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ytile + 0.5) / n)));
-        const lat = latRad * 180 / Math.PI;
-        return [lat, lon];
-      }
       // Debug: log the position used for tile calculation
       // ...existing code...
       const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
-      let tiles: Array<{ lat: number; lng: number }> = [];
       if (cityMode === 'inside') {
-        tiles = [{ lat: position[0], lng: position[1] }];
+        // Single tile request
+        fetch(`/api/tile?lat=${position[0]}&lng=${position[1]}`)
+          .then(async (res) => {
+            if (!res.ok) return [];
+            try {
+              const data = await res.json();
+              return data && data.elements ? data.elements : [];
+            } catch {
+              return [];
+            }
+          })
+          .then((elements) => {
+            const seen = new Set<string>();
+            const filtered = elements.filter((el: OsmElement) => {
+              if (el.id == null || el.type == null) return false;
+              const key = `${el.type}:${el.id}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              if (!el.tags) return false;
+              for (const [k, v] of Object.entries(el.tags)) {
+                if (allowedTags.has(k)) return true;
+                if (allowedTags.has(`${k}:${v}`)) return true;
+              }
+              return false;
+            });
+            setOsmData(filtered);
+            setPanelOpen(true);
+          })
+          .catch(() => {
+            setOsmData([]);
+            setPanelOpen(true);
+          });
       } else {
-        const tileSet = new Set<string>();
+        // Single bounding box request for 9 tiles
+        let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
         for (let dx = -1; dx <= 1; dx++) {
           for (let dy = -1; dy <= 1; dy++) {
             const x = xtile + dx;
             const y = ytile + dy;
-            const [lat, lng] = tileToLatLng(x, y, zoomLevel);
-            const key = `${x},${y}`;
-            if (!tileSet.has(key)) {
-              tileSet.add(key);
-              tiles.push({ lat, lng });
-            }
+            const [[lat1, lng1], [lat2, lng2]] = getTileBoundsXY(x, y, zoomLevel);
+            minLat = Math.min(minLat, lat1, lat2);
+            maxLat = Math.max(maxLat, lat1, lat2);
+            minLng = Math.min(minLng, lng1, lng2);
+            maxLng = Math.max(maxLng, lng1, lng2);
           }
         }
-      }
-      Promise.all(
-        tiles.map(({ lat, lng }) =>
-          fetch(`/api/tile?lat=${lat}&lng=${lng}`)
-            .then(async (res) => {
-              if (!res.ok) return [];
-              try {
-                const data = await res.json();
-                return data && data.elements ? data.elements : [];
-              } catch {
-                return [];
+        fetch(`/api/tile?minLat=${minLat}&minLng=${minLng}&maxLat=${maxLat}&maxLng=${maxLng}`)
+          .then(async (res) => {
+            if (!res.ok) return [];
+            try {
+              const data = await res.json();
+              return data && data.elements ? data.elements : [];
+            } catch {
+              return [];
+            }
+          })
+          .then((elements) => {
+            const seen = new Set<string>();
+            const filtered = elements.filter((el: OsmElement) => {
+              if (el.id == null || el.type == null) return false;
+              const key = `${el.type}:${el.id}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              if (!el.tags) return false;
+              for (const [k, v] of Object.entries(el.tags)) {
+                if (allowedTags.has(k)) return true;
+                if (allowedTags.has(`${k}:${v}`)) return true;
               }
-            })
-        )
-      ).then((results) => {
-        const allElements: OsmElement[] = ([] as OsmElement[]).concat(...results);
-        const seen = new Set<string>();
-        const filtered = allElements.filter((el) => {
-          if (el.id == null || el.type == null) return false;
-          const key = `${el.type}:${el.id}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          if (!el.tags) return false;
-          // filter using allowedTags from utils/allowedTags
-          for (const [k, v] of Object.entries(el.tags)) {
-            if (allowedTags.has(k)) return true;
-            if (allowedTags.has(`${k}:${v}`)) return true;
-          }
-          return false;
-        });
-        setOsmData(filtered);
-        setPanelOpen(true);
-      }).catch(() => {
-        setOsmData([]);
-        setPanelOpen(true);
-      });
+              return false;
+            });
+            setOsmData(filtered);
+            setPanelOpen(true);
+          })
+          .catch(() => {
+            setOsmData([]);
+            setPanelOpen(true);
+          });
+      }
       setShouldFetchOsm(false);
     }
   }, [shouldFetchOsm, position, cityMode]);

@@ -38,12 +38,12 @@ const InitialModal: React.FC<InitialModalProps> = ({ show, cityMode, onFindLocat
           gap: 24,
         }}
       >
-        <h1 style={{ fontSize: '1.55rem', fontWeight: 800, marginBottom: 6, color: '#2563eb' }}>Do You Know What&apos;s Around You?</h1>
+        <h1 style={{ fontSize: '1.55rem', fontWeight: 800, marginBottom: 2, color: '#2563eb' }}>Do You Know What&apos;s Around You?</h1>
         <h1
           style={{
-            marginBottom: 8,
+            marginBottom: 4,
             fontWeight: 800,
-            fontSize: '1.55rem',
+            fontSize: '2rem',
             background: 'linear-gradient(90deg, #2563eb 0%, #a21caf 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
