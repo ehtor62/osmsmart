@@ -2,13 +2,11 @@ import React from "react";
 
 interface InitialModalProps {
   show: boolean;
-  cityMode: 'city center' | 'suburban' | 'countryside';
   onFindLocation: () => void;
   onClose: () => void;
-  onToggleCityMode: (mode: 'city center' | 'suburban' | 'countryside') => void;
 }
 
-const InitialModal: React.FC<InitialModalProps> = ({ show, cityMode, onFindLocation, onClose, onToggleCityMode }) => {
+const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onClose }) => {
   if (!show) return null;
   return (
     <div
@@ -90,63 +88,7 @@ const InitialModal: React.FC<InitialModalProps> = ({ show, cityMode, onFindLocat
             I have a specific interest
           </button>
         </div>
-        {/* Mode selection buttons */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10, gap: 16 }}>
-          <button
-            style={{
-              padding: '8px 20px',
-              background: cityMode === 'city center' ? '#2563eb' : '#e5e7eb',
-              color: cityMode === 'city center' ? '#fff' : '#2563eb',
-              border: cityMode === 'city center' ? '2px solid #2563eb' : '2px solid #e5e7eb',
-              borderRadius: 8,
-              fontWeight: 600,
-              fontSize: '1rem',
-              cursor: 'pointer',
-              boxShadow: cityMode === 'city center' ? '0 2px 8px rgba(37,99,235,0.10)' : 'none',
-              transition: 'background 0.2s',
-              minWidth: 120,
-            }}
-            onClick={() => { if (cityMode !== 'city center') onToggleCityMode('city center'); }}
-          >
-            City Center
-          </button>
-          <button
-            style={{
-              padding: '8px 20px',
-              background: cityMode === 'suburban' ? '#2563eb' : '#e5e7eb',
-              color: cityMode === 'suburban' ? '#fff' : '#2563eb',
-              border: cityMode === 'suburban' ? '2px solid #2563eb' : '2px solid #e5e7eb',
-              borderRadius: 8,
-              fontWeight: 600,
-              fontSize: '1rem',
-              cursor: 'pointer',
-              boxShadow: cityMode === 'suburban' ? '0 2px 8px rgba(37,99,235,0.10)' : 'none',
-              transition: 'background 0.2s',
-              minWidth: 120,
-            }}
-            onClick={() => { if (cityMode !== 'suburban') onToggleCityMode('suburban'); }}
-          >
-            Suburban
-          </button>
-          <button
-            style={{
-              padding: '8px 20px',
-              background: cityMode === 'countryside' ? '#2563eb' : '#e5e7eb',
-              color: cityMode === 'countryside' ? '#fff' : '#2563eb',
-              border: cityMode === 'countryside' ? '2px solid #2563eb' : '2px solid #e5e7eb',
-              borderRadius: 8,
-              fontWeight: 600,
-              fontSize: '1rem',
-              cursor: 'pointer',
-              boxShadow: cityMode === 'countryside' ? '0 2px 8px rgba(37,99,235,0.10)' : 'none',
-              transition: 'background 0.2s',
-              minWidth: 120,
-            }}
-            onClick={() => { if (cityMode !== 'countryside') onToggleCityMode('countryside'); }}
-          >
-            Countryside
-          </button>
-        </div>
+        {/* Mode selection buttons removed for new workflow */}
       </div>
     </div>
   );

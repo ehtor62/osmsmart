@@ -42,12 +42,15 @@ const OsmDataPanel: React.FC<OsmDataPanelProps> = ({ open, osmData, loadingSumma
     </div>
     <div className="p-4">
       <button
-        className="mb-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors w-full"
+        className="mb-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors w-full"
         onClick={onSummarize}
         disabled={loadingSummary}
       >
         {loadingSummary ? "Summarizing..." : "Summarize"}
       </button>
+      <div style={{ marginBottom: 12, textAlign: 'center', color: '#2563eb', fontWeight: 500, fontSize: '0.95rem' }}>
+        {osmData ? `${osmData.length} element${osmData.length === 1 ? '' : 's'} found` : 'Loading...'}
+      </div>
       <ul className="text-xs" style={{ fontSize: '0.75rem' }}>
         {osmData ? (
           osmData.map((el, idx) => (

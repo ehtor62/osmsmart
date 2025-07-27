@@ -69,8 +69,7 @@ const redMarkerIcon = L.icon({
 });
 
 export default function Map() {
-  // City/countryside toggle state
-  const [cityMode, setCityMode] = useState<'city center' | 'suburban' | 'countryside'>('city center');
+  // Remove cityMode, use dynamic grid size
   const [position, setPosition] = useState<[number, number] | null>(null);
   const [osmData, setOsmData] = useState<OsmElement[] | null>(null);
   const [summary, setSummary] = useState<string>("");
@@ -81,6 +80,7 @@ export default function Map() {
   const [showInitModal, setShowInitModal] = useState<boolean>(true);
   const [shouldFetchOsm, setShouldFetchOsm] = useState<boolean>(false);
   const [showSpinner, setShowSpinner] = useState<boolean>(false);
+  const [gridSize, setGridSize] = useState<number>(3); // start with 3x3
   // Always use zoom 17 for tile calculations as per user request
   const zoomLevel = 17;
 
@@ -94,6 +94,7 @@ export default function Map() {
   const handleFindLocation = () => {
     setShowInitModal(false);
     setShowSpinner(true);
+    setGridSize(3); // always start with 3x3
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -112,8 +113,8 @@ export default function Map() {
   };
 
   useEffect(() => {
-    if (shouldFetchOsm && position) {
-      setShowSpinner(false);
+    const fetchOsmWithGrid = async (grid: number): Promise<OsmElement[]> => {
+      if (!position) return [];
       function latLngToTile(lat: number, lng: number, zoom: number) {
         const n = Math.pow(2, zoom);
         const xtile = Math.floor(((lng + 180) / 360) * n);
@@ -122,17 +123,8 @@ export default function Map() {
         );
         return { xtile, ytile };
       }
-      // Debug: log the position used for tile calculation
-      // ...existing code...
       const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
-      let range = 1; // default: city center (3x3)
-      if (cityMode === 'city center') {
-        range = 1;
-      } else if (cityMode === 'suburban') {
-        range = 2; // 5x5
-      } else if (cityMode === 'countryside') {
-        range = 4; // 9x9
-      }
+      const range = Math.floor(grid / 2);
       let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
       for (let dx = -range; dx <= range; dx++) {
         for (let dy = -range; dy <= range; dy++) {
@@ -145,40 +137,42 @@ export default function Map() {
           maxLng = Math.max(maxLng, lng1, lng2);
         }
       }
-      fetch(`/api/tile?minLat=${minLat}&minLng=${minLng}&maxLat=${maxLat}&maxLng=${maxLng}`)
-        .then(async (res) => {
-          if (!res.ok) return [];
-          try {
-            const data = await res.json();
-            return data && data.elements ? data.elements : [];
-          } catch {
-            return [];
-          }
-        })
-        .then((elements) => {
-          const seen = new Set<string>();
-          const filtered = elements.filter((el: OsmElement) => {
-            if (el.id == null || el.type == null) return false;
-            const key = `${el.type}:${el.id}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
+      const res = await fetch(`/api/tile?minLat=${minLat}&minLng=${minLng}&maxLat=${maxLat}&maxLng=${maxLng}`);
+      if (!res.ok) return [];
+      try {
+        const data = await res.json();
+        // Filter elements by allowedTags
+        if (data && data.elements) {
+          return data.elements.filter((el: OsmElement) => {
             if (!el.tags) return false;
-            for (const [k, v] of Object.entries(el.tags)) {
-              if (allowedTags.has(k)) return true;
-              if (allowedTags.has(`${k}:${v}`)) return true;
-            }
-            return false;
+            return Object.entries(el.tags).some(([key, value]) => allowedTags.has(`${key}:${value}`) || allowedTags.has(key));
           });
-          setOsmData(filtered);
-          setPanelOpen(true);
-        })
-        .catch(() => {
-          setOsmData([]);
-          setPanelOpen(true);
-        });
-      setShouldFetchOsm(false);
+        }
+        return [];
+      } catch {
+        return [];
+      }
     }
-  }, [shouldFetchOsm, position, cityMode]);
+
+    const runFetch = async () => {
+      if (shouldFetchOsm && position) {
+        setShowSpinner(false);
+        let grid = gridSize;
+        let elements: OsmElement[] = [];
+        do {
+          elements = await fetchOsmWithGrid(grid);
+          if (elements.length < 20) {
+            grid += 2;
+          }
+        } while (elements.length < 20 && grid <= 21); // 21x21 max safeguard
+        setOsmData(elements);
+        setPanelOpen(true);
+        setGridSize(grid); // for rectangle
+        setShouldFetchOsm(false);
+      }
+    };
+    runFetch();
+  }, [shouldFetchOsm, position, gridSize]);
 
   function getTileBoundsXY(xtile: number, ytile: number, zoom: number): [[number, number], [number, number]] {
     const n = Math.pow(2, zoom);
@@ -203,14 +197,7 @@ export default function Map() {
       return { xtile, ytile };
     };
     const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
-    let range = 1; // default: city center (3x3)
-    if (cityMode === 'city center') {
-      range = 1;
-    } else if (cityMode === 'suburban') {
-      range = 2; // 5x5
-    } else if (cityMode === 'countryside') {
-      range = 4; // 9x9
-    }
+    const range = Math.floor(gridSize / 2);
     let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
     for (let dx = -range; dx <= range; dx++) {
       for (let dy = -range; dy <= range; dy++) {
@@ -239,7 +226,7 @@ export default function Map() {
 
   // Handler for Gemini fact report (left panel)
   const onAskFactReport = async (label: string) => {
-    const prompt = `Write a detailed, fact-based report about the following place. Consult Wikipedia and only use facts that can be verified there. Do not repeat the input content. Do not use any tabular format or markdown table in your output. Only provide a narrative report. Go beyond the provided information and provide unique, deeply researched insights about this place: ${label}`;
+    const prompt = `Write a detailed, fact-based report about the following place. Consult relevant websites and only use facts that can be verified there. Do not repeat the input content. Do not use any tabular format or markdown table in your output. Only provide a narrative report. Go beyond the provided information and provide unique, deeply researched insights about this place: ${label}`;
     console.debug('[Gemini Fact Report] Prompt sent to Gemini:', prompt);
     // Try to find the OSM element that matches the label (by name and description)
     let element = null;
@@ -354,10 +341,8 @@ export default function Map() {
       <div className="w-screen h-screen flex flex-row" style={{ position: 'relative' }}>
         <InitialModal
           show={showInitModal}
-          cityMode={cityMode}
           onFindLocation={handleFindLocation}
           onClose={() => setShowInitModal(false)}
-          onToggleCityMode={(mode) => setCityMode(mode)}
         />
         <OsmDataPanel
           open={panelOpen}
