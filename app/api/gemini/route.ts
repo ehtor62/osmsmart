@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Missing Gemini API key" }), { status: 500 });
   }
   try {
-    const geminiPrompt = `${prompt} ${JSON.stringify(relevantData)}. Only for elements that are very relevant for a tourist, provide a markdown table with the following columns: name of the element, description, best for, insider tips, latitude (mandatory), longitude (mandatory). Latitude and longitude must always be listed for each element. Above the table, write a short summary for tourists. If no elements are relevant, say so and do not provide a table.`;
+    const geminiPrompt = `${prompt} ${JSON.stringify(relevantData)}. Only for elements with latitude and longitude values, provide a markdown table with the following columns: name of the element, description, popularity, insider tips, latitude (mandatory), longitude (mandatory). Latitude and longitude must always be listed for each element. Above the table, describe the elements provided from the point of view of a tourist.`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-002:generateContent?key=${apiKey}`,
       {
         method: "POST",

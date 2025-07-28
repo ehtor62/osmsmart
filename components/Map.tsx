@@ -69,7 +69,8 @@ const redMarkerIcon = L.icon({
 });
 
 export default function Map() {
-  // Remove cityMode, use dynamic grid size
+
+  // State declarations
   const [position, setPosition] = useState<[number, number] | null>(null);
   const [osmData, setOsmData] = useState<OsmElement[] | null>(null);
   const [summary, setSummary] = useState<string>("");
@@ -83,6 +84,13 @@ export default function Map() {
   const [gridSize, setGridSize] = useState<number>(3); // start with 3x3
   // Always use zoom 17 for tile calculations as per user request
   const zoomLevel = 17;
+
+  // Hide spinner when side panel opens (must be after state declarations)
+  useEffect(() => {
+    if (panelOpen) {
+      setShowSpinner(false);
+    }
+  }, [panelOpen]);
 
   // On load, center on Zurich only, do not open panel
   useEffect(() => {
@@ -156,7 +164,6 @@ export default function Map() {
 
     const runFetch = async () => {
       if (shouldFetchOsm && position) {
-        setShowSpinner(false);
         let grid = gridSize;
         let elements: OsmElement[] = [];
         do {
@@ -166,6 +173,7 @@ export default function Map() {
           }
         } while (elements.length < 20 && grid <= 21); // 21x21 max safeguard
         setOsmData(elements);
+        setShowSpinner(false); // Hide spinner only after OSM data is fetched
         setPanelOpen(true);
         setGridSize(grid); // for rectangle
         setShouldFetchOsm(false);
@@ -307,7 +315,8 @@ export default function Map() {
           `}</style>
         </div>
       )}
-      {showSpinner ? (
+      {/* Modern large spinner overlay, visible until side panel opens */}
+      {showSpinner && !panelOpen && (
         <div
           style={{
             position: 'fixed',
@@ -320,24 +329,33 @@ export default function Map() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            flexDirection: 'column',
           }}
         >
           <div style={{
-            border: '6px solid #e5e7eb',
-            borderTop: '6px solid #2563eb',
-            borderRadius: '50%',
-            width: 64,
-            height: 64,
-            animation: 'spin 1s linear infinite',
-          }} />
-          <style>{`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}</style>
+            width: 120,
+            height: 120,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="60" cy="60" r="52" stroke="#e5e7eb" strokeWidth="12" />
+              <circle cx="60" cy="60" r="52" stroke="#2563eb" strokeWidth="12" strokeDasharray="120 120" strokeDashoffset="60" style={{
+                transformOrigin: 'center',
+                animation: 'spin-modern 1.2s linear infinite',
+              }} />
+              <style>{`
+                @keyframes spin-modern {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
+            </svg>
+          </div>
+          <div style={{ color: '#2563eb', fontWeight: 700, fontSize: '1.35rem', marginTop: 32, letterSpacing: 0.5 }}>Finding places around you…</div>
         </div>
-      ) : null}
+      )}
       <div className="w-screen h-screen flex flex-row" style={{ position: 'relative' }}>
         <InitialModal
           show={showInitModal}
