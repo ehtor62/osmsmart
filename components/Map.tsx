@@ -82,13 +82,43 @@ export default function Map() {
   const [shouldFetchOsm, setShouldFetchOsm] = useState<boolean>(false);
   const [showSpinner, setShowSpinner] = useState<boolean>(false);
   const [gridSize, setGridSize] = useState<number>(3); // start with 3x3
+  // Feedback states
+  const [tilesChecked, setTilesChecked] = useState<number>(0);
+  const [elementsRetrieved, setElementsRetrieved] = useState<number>(0);
+  // Helper to estimate area covered by tiles (in m^2)
+  function getTileAreaSqMeters(zoom: number, lat: number): number {
+    // OSM tile size is 256x256 pixels, but we want area in meters
+    // At zoom 17, tile width in degrees: 360 / 2^17
+    // Use approximate formula for area at latitude
+    const earthRadius = 6378137; // meters
+    const tileCount = tilesChecked;
+    if (!position || tileCount === 0) return 0;
+    // Calculate tile width in degrees
+    const tileWidthDeg = 360 / Math.pow(2, zoom);
+    // Calculate tile height in degrees
+    const tileHeightDeg = 180 / Math.pow(2, zoom - 1);
+    // Convert degrees to meters at given latitude
+    const latRad = lat * Math.PI / 180;
+    const metersPerDegLat = 111132.92 - 559.82 * Math.cos(2 * latRad) + 1.175 * Math.cos(4 * latRad);
+    const metersPerDegLon = 111412.84 * Math.cos(latRad) - 93.5 * Math.cos(3 * latRad);
+    const tileWidthMeters = tileWidthDeg * metersPerDegLon;
+    const tileHeightMeters = tileHeightDeg * metersPerDegLat;
+    const areaPerTile = tileWidthMeters * tileHeightMeters;
+    return areaPerTile * tileCount;
+  }
   // Always use zoom 17 for tile calculations as per user request
   const zoomLevel = 17;
 
-  // Hide spinner when side panel opens (must be after state declarations)
+  // Hide spinner when side panel opens and zoom out to fit highlighted area
   useEffect(() => {
     if (panelOpen) {
       setShowSpinner(false);
+      // Zoom out to fit highlighted area if tileBounds is available
+      if (tileBounds && position) {
+        // Use leaflet's fitBounds via a custom event
+        const event = new CustomEvent('fitTileBounds', { detail: tileBounds });
+        window.dispatchEvent(event);
+      }
     }
   }, [panelOpen]);
 
@@ -106,7 +136,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude, pos.coords.longitude]);
+          setPosition([pos.coords.latitude + 2, pos.coords.longitude]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -134,6 +164,7 @@ export default function Map() {
       const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
       const range = Math.floor(grid / 2);
       let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+      let tileCount = 0;
       for (let dx = -range; dx <= range; dx++) {
         for (let dy = -range; dy <= range; dy++) {
           const x = xtile + dx;
@@ -143,21 +174,27 @@ export default function Map() {
           maxLat = Math.max(maxLat, lat1, lat2);
           minLng = Math.min(minLng, lng1, lng2);
           maxLng = Math.max(maxLng, lng1, lng2);
+          tileCount++;
         }
       }
+      setTilesChecked(tileCount);
       const res = await fetch(`/api/tile?minLat=${minLat}&minLng=${minLng}&maxLat=${maxLat}&maxLng=${maxLng}`);
       if (!res.ok) return [];
       try {
         const data = await res.json();
         // Filter elements by allowedTags
         if (data && data.elements) {
-          return data.elements.filter((el: OsmElement) => {
+          const filtered = data.elements.filter((el: OsmElement) => {
             if (!el.tags) return false;
             return Object.entries(el.tags).some(([key, value]) => allowedTags.has(`${key}:${value}`) || allowedTags.has(key));
           });
+          setElementsRetrieved(filtered.length);
+          return filtered;
         }
+        setElementsRetrieved(0);
         return [];
       } catch {
+        setElementsRetrieved(0);
         return [];
       }
     }
@@ -166,12 +203,14 @@ export default function Map() {
       if (shouldFetchOsm && position) {
         let grid = gridSize;
         let elements: OsmElement[] = [];
+        setTilesChecked(0);
+        setElementsRetrieved(0);
         do {
           elements = await fetchOsmWithGrid(grid);
           if (elements.length < 20) {
             grid += 2;
           }
-        } while (elements.length < 20 && grid <= 21); // 21x21 max safeguard
+        } while (elements.length < 20 && grid <= 29); // 21x21 max safeguard
         setOsmData(elements);
         setShowSpinner(false); // Hide spinner only after OSM data is fetched
         setPanelOpen(true);
@@ -222,6 +261,21 @@ export default function Map() {
       [minLat, minLng],
       [maxLat, maxLng],
     ];
+  }
+
+  // Custom hook to fit bounds when event is dispatched
+  function FitBoundsListener() {
+    const map = useMap();
+    useEffect(() => {
+      const handler = (e: any) => {
+        if (e.detail) {
+          map.fitBounds([e.detail[0], e.detail[1]], { animate: true, padding: [40, 40] });
+        }
+      };
+      window.addEventListener('fitTileBounds', handler);
+      return () => window.removeEventListener('fitTileBounds', handler);
+    }, [map]);
+    return null;
   }
 
   const geminiMarkers = summary ? parseGeminiMarkers(summary) : [];
@@ -354,6 +408,25 @@ export default function Map() {
             </svg>
           </div>
           <div style={{ color: '#2563eb', fontWeight: 700, fontSize: '1.35rem', marginTop: 32, letterSpacing: 0.5 }}>Finding places around you…</div>
+          <div style={{ color: '#222', fontWeight: 500, fontSize: '1.08rem', marginTop: 18, letterSpacing: 0.2 }}>
+            {tilesChecked > 0 && position && (
+              (() => {
+                const areaSqMeters = getTileAreaSqMeters(zoomLevel, position[0]);
+                let areaText = '';
+                if (areaSqMeters > 1000000) {
+                  areaText = `${(areaSqMeters / 1000000).toFixed(2)} km²`;
+                } else if (areaSqMeters > 10000) {
+                  areaText = `${(areaSqMeters / 10000).toFixed(1)} ha`;
+                } else {
+                  areaText = `${Math.round(areaSqMeters).toLocaleString()} m²`;
+                }
+                return <span>Area covered: {areaText}</span>;
+              })()
+            )}
+            {elementsRetrieved > 0 && (
+              <span> &middot; {elementsRetrieved} element{elementsRetrieved > 1 ? 's' : ''} retrieved</span>
+            )}
+          </div>
         </div>
       )}
       <div className="w-screen h-screen flex flex-row" style={{ position: 'relative' }}>
@@ -409,40 +482,40 @@ export default function Map() {
           }}
           onAskFactReport={onAskFactReport}
         />
-      {/* Left-side sliding panel for Gemini fact report */}
-      {leftPanelOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: 400,
-            maxWidth: '90vw',
-            height: '100vh',
-            background: '#fff',
-            boxShadow: '2px 0 16px rgba(0,0,0,0.12)',
-            zIndex: 8000,
-            transition: 'left 0.3s cubic-bezier(.4,0,.2,1)',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div style={{ padding: '18px 20px 10px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 700, fontSize: '1.1rem', color: '#2563eb' }}>Gemini Fact Report</span>
-            <button
-              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 16px', fontWeight: 600, cursor: 'pointer' }}
-              onClick={() => setLeftPanelOpen(false)}
-            >Close</button>
+        {/* Left-side sliding panel for Gemini fact report */}
+        {leftPanelOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: 400,
+              maxWidth: '90vw',
+              height: '100vh',
+              background: '#fff',
+              boxShadow: '2px 0 16px rgba(0,0,0,0.12)',
+              zIndex: 8000,
+              transition: 'left 0.3s cubic-bezier(.4,0,.2,1)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div style={{ padding: '18px 20px 10px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, fontSize: '1.1rem', color: '#2563eb' }}>Gemini Fact Report</span>
+              <button
+                style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 16px', fontWeight: 600, cursor: 'pointer' }}
+                onClick={() => setLeftPanelOpen(false)}
+              >Close</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20, fontSize: '0.98rem', color: '#222' }}>
+              {leftPanelLoading ? (
+                <div style={{ color: '#2563eb', fontWeight: 600, fontSize: '1.05rem', marginTop: 40 }}>Loading Gemini report…</div>
+              ) : (
+                <div style={{ whiteSpace: 'pre-line' }}>{leftPanelContent}</div>
+              )}
+            </div>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 20, fontSize: '0.98rem', color: '#222' }}>
-            {leftPanelLoading ? (
-              <div style={{ color: '#2563eb', fontWeight: 600, fontSize: '1.05rem', marginTop: 40 }}>Loading Gemini report…</div>
-            ) : (
-              <div style={{ whiteSpace: 'pre-line' }}>{leftPanelContent}</div>
-            )}
-          </div>
-        </div>
-      )}
+        )}
         <div className="flex-1 h-full">
           <MapContainer
             center={position || [47.3769, 8.5417]}
@@ -454,6 +527,7 @@ export default function Map() {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution="&copy; OpenStreetMap contributors"
             />
+            <FitBoundsListener />
             {position && (
               <>
                 <CenterMap position={position} />
