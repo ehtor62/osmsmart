@@ -9,6 +9,20 @@ type OsmElement = {
   nodes?: number[];
   members?: Array<{ type: string; ref: number; role: string }>;
 };
+
+// Helper to compute center of a way element
+function getWayCenter(nodeCoords: Array<{ lat: number; lon: number }>): { lat: number; lon: number } | null {
+  if (!nodeCoords || nodeCoords.length === 0) return null;
+  // If closed polygon, could use a polygon centroid algorithm, but average is fine for most cases
+  const sum = nodeCoords.reduce((acc, node) => ({
+    lat: acc.lat + node.lat,
+    lon: acc.lon + node.lon
+  }), { lat: 0, lon: 0 });
+  return {
+    lat: sum.lat / nodeCoords.length,
+    lon: sum.lon / nodeCoords.length
+  };
+}
 import { useEffect, useState } from "react";
 import { allowedTags } from "../utils/allowedTags";
 import InitialModal from "./InitialModal";
@@ -27,18 +41,25 @@ function parseGeminiMarkers(summary: string): Array<{ name: string; description:
   // Remove header and separator
   const dataLines = lines.filter((_, i) => i > 1);
   const markers: Array<{ name: string; description: string; lat: number; lon: number }> = [];
+  // Find column indices dynamically based on header row
+  const headerCells = lines[0].split('|').map(cell => cell.trim().toLowerCase());
+  const nameIdx = headerCells.findIndex(h => h === 'name');
+  const descIdx = headerCells.findIndex(h => h === 'description');
+  const popIdx = headerCells.findIndex(h => h === 'popularity');
+  const tipIdx = headerCells.findIndex(h => h === 'insider tips');
+  const latIdx = headerCells.findIndex(h => h === 'latitude');
+  const lonIdx = headerCells.findIndex(h => h === 'longitude');
   dataLines.forEach(line => {
-    // Split and trim, but keep empty cells
     const cells = line.split('|').map(cell => cell.trim());
-    // Expect: | Name | Description | Best For | Insider Tips | Latitude | Longitude |
-    // cells[1]=Name, cells[2]=Description, cells[5]=Latitude, cells[6]=Longitude
-    if (cells.length >= 7) {
-      const name = cells[1];
-      const description = cells[2];
-      const lat = parseFloat(cells[5]);
-      const lon = parseFloat(cells[6]);
+    if (
+      cells.length > Math.max(nameIdx, descIdx, popIdx, tipIdx, latIdx, lonIdx) &&
+      latIdx !== -1 && lonIdx !== -1
+    ) {
+      const name = nameIdx !== -1 ? cells[nameIdx] : '';
+      const description = descIdx !== -1 ? cells[descIdx] : '';
+      const lat = parseFloat(cells[latIdx]);
+      const lon = parseFloat(cells[lonIdx]);
       if (!isNaN(lat) && !isNaN(lon)) {
-        console.log(`Gemini marker lat/lon:`, lat, lon);
         markers.push({ name, description, lat, lon });
       }
     }
@@ -136,7 +157,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude + 2, pos.coords.longitude]);
+          setPosition([pos.coords.latitude + 1, pos.coords.longitude]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -184,9 +205,19 @@ export default function Map() {
         const data = await res.json();
         // Filter elements by allowedTags
         if (data && data.elements) {
+          // For way elements, if nodeCoords are present, set lat/lon to center
           const filtered = data.elements.filter((el: OsmElement) => {
             if (!el.tags) return false;
             return Object.entries(el.tags).some(([key, value]) => allowedTags.has(`${key}:${value}`) || allowedTags.has(key));
+          }).map((el: any) => {
+            if (el.type === 'way' && el.nodeCoords && el.nodeCoords.length > 0) {
+              const center = getWayCenter(el.nodeCoords);
+              if (center) {
+                el.lat = center.lat;
+                el.lon = center.lon;
+              }
+            }
+            return el;
           });
           setElementsRetrieved(filtered.length);
           return filtered;
@@ -408,7 +439,7 @@ export default function Map() {
             </svg>
           </div>
           <div style={{ color: '#2563eb', fontWeight: 700, fontSize: '1.35rem', marginTop: 32, letterSpacing: 0.5 }}>Finding places around you…</div>
-          <div style={{ color: '#222', fontWeight: 500, fontSize: '1.08rem', marginTop: 18, letterSpacing: 0.2 }}>
+          <div style={{ color: '#2563eb', fontWeight: 700, fontSize: '1.35rem', marginTop: 18, letterSpacing: 0.2 }}>
             {tilesChecked > 0 && position && (
               (() => {
                 const areaSqMeters = getTileAreaSqMeters(zoomLevel, position[0]);
@@ -451,7 +482,8 @@ export default function Map() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   relevantData: osmData,
-                  prompt: "Summarize the most relevant tourist information from these OpenStreetMap elements."
+                  prompt:
+                    "Summarize the most relevant tourist information from these OpenStreetMap elements. Output a markdown table with exactly these columns, in this order: Name, Description, Popularity, Insider Tips, Latitude, Longitude. The column header must be 'Popularity' (not 'Best for'). Do not use any other column headers. Do not omit any columns, even if some data is missing—leave the cell empty if needed. Always include all columns for every row."
                 })
               });
               const result = await response.json();
@@ -543,6 +575,7 @@ export default function Map() {
                     </div>
                   </Popup>
                 </Marker>
+                {/* Markers for Gemini summary table */}
                 {geminiMarkers
                   .filter(marker => marker.name?.trim() || marker.description?.trim())
                   .map((marker, idx) => {
@@ -565,6 +598,45 @@ export default function Map() {
                       </Marker>
                     );
                   })}
+                {/* Markers for OSM way elements (center) */}
+                {osmData && osmData.length > 0 && osmData.filter(el => el.type === 'way' && el.nodes && el.nodes.length > 0).map((el, idx) => {
+                  // Assume you have a way to get node coordinates for each node id (el.nodes)
+                  // For demo, use el.lat/el.lon if present, else skip
+                  // In real use, you need to fetch node coordinates from OSM API or cache
+                  // Here, we check if el has a 'nodeCoords' property (array of {lat, lon})
+                  // If not, skip
+                  // Example: el.nodeCoords = [{lat, lon}, ...]
+                  // If you have only node ids, you need to resolve them to coordinates
+                  // For now, skip if not present
+                  // This is a placeholder for actual node coordinate resolution
+                  // If you have nodeCoords, use getWayCenter
+                  // If not, skip
+                  // You may want to add this logic where you fetch OSM data
+                  // For now, demo only
+                  // @ts-ignore
+                  if (!el.nodeCoords || el.nodeCoords.length === 0) return null;
+                  // @ts-ignore
+                  const center = getWayCenter(el.nodeCoords);
+                  if (!center) return null;
+                  const wayIcon = L.divIcon({
+                    className: 'way-marker',
+                    html: `<div style="background:#059669;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.10);">W</div>`,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 28],
+                    popupAnchor: [0, -28],
+                  });
+                  return (
+                    <Marker key={`way-${el.id}`} position={[center.lat, center.lon]} icon={wayIcon}>
+                      <Popup>
+                        <div style={{ maxWidth: 300 }}>
+                          <div className="font-bold mb-1">Way #{el.id}</div>
+                          <div>{el.tags?.name || 'Unnamed way'}</div>
+                          <div className="text-xs text-gray-700">center: lat: {center.lat.toFixed(6)}, lon: {center.lon.toFixed(6)}</div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
                 {tileBounds && osmData && osmData.length > 0 && (
                   <Rectangle bounds={tileBounds} pathOptions={{ color: "red", weight: 2 }} />
                 )}
