@@ -157,7 +157,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude + 1, pos.coords.longitude]);
+          setPosition([pos.coords.latitude, pos.coords.longitude]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -483,7 +483,7 @@ export default function Map() {
                 body: JSON.stringify({
                   relevantData: osmData,
                   prompt:
-                    "Summarize the most relevant tourist information from these OpenStreetMap elements. Output a markdown table with exactly these columns, in this order: Name, Description, Popularity, Insider Tips, Latitude, Longitude. The column header must be 'Popularity' (not 'Best for'). Do not use any other column headers. Do not omit any columns, even if some data is missing—leave the cell empty if needed. Always include all columns for every row."
+                    "You are a strict markdown table generator. You must always output a markdown table with exactly these columns, in this order: Name, Description, Popularity, Insider Tips, Latitude, Longitude. Never omit or reorder columns, even if data is missing—leave the cell empty if needed. Output only the table, nothing else. The column header must be 'Popularity' (not 'Best for'). Do not use any other column headers.\nSummarize the most relevant tourist information from these OpenStreetMap elements."
                 })
               });
               const result = await response.json();
