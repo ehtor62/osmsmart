@@ -8,6 +8,7 @@ type OsmElement = {
   tags?: Record<string, string>;
   nodes?: number[];
   members?: Array<{ type: string; ref: number; role: string }>;
+  nodeCoords?: Array<{ lat: number; lon: number }>;
 };
 
 // Helper to compute center of a way element
@@ -29,7 +30,6 @@ import InitialModal from "./InitialModal";
 import { MapContainer, TileLayer, Marker, Popup, useMap, Rectangle } from "react-leaflet";
 import OsmDataPanel from "./OsmDataPanel";
 import GeminiSummaryPanel from "./GeminiSummaryPanel";
-// ...existing code...
 // Helper to parse Gemini results for markers
 function parseGeminiMarkers(summary: string): Array<{ name: string; description: string; lat: number; lon: number }> {
   // Find the markdown table (robustly)
@@ -37,22 +37,50 @@ function parseGeminiMarkers(summary: string): Array<{ name: string; description:
   const tableMatch = summary.match(tableRegex);
   if (!tableMatch) return [];
   const table = tableMatch[0];
-  const lines = table.split('\n').filter(line => line.trim().startsWith('|'));
-  // Remove header and separator
-  const dataLines = lines.filter((_, i) => i > 1);
-  const markers: Array<{ name: string; description: string; lat: number; lon: number }> = [];
-  // Find column indices dynamically based on header row
-  const headerCells = lines[0].split('|').map(cell => cell.trim().toLowerCase());
+  let lines = table.split('\n').filter(line => line.trim().startsWith('|'));
+  if (lines.length < 2) return [];
+  // Repair header: ensure all required columns are present and in correct order
+  const requiredHeaders = ['name', 'description', 'popularity', 'insider tips', 'latitude', 'longitude'];
+  let headerCells = lines[0].split('|').map(cell => cell.trim().toLowerCase());
+  const headerMap: { [key: string]: number } = {};
+  requiredHeaders.forEach(h => {
+    headerMap[h] = headerCells.indexOf(h);
+  });
+  // If any required column is missing, repair header and rows
+  const needsRepair = requiredHeaders.some(h => headerMap[h] === -1);
+  if (needsRepair) {
+    // Build new header in correct order
+    const newHeader = '| ' + requiredHeaders.map(h => h.charAt(0).toUpperCase() + h.slice(1)).join(' | ') + ' |';
+    // Build new separator
+    const newSeparator = '| ' + requiredHeaders.map(() => '---').join(' | ') + ' |';
+    // Repair each row: fill missing columns with empty string
+    const newRows = lines.slice(2).map(row => {
+      const cells = row.split('|').map(cell => cell.trim());
+      // Remove any leading/trailing empty cell
+      if (cells.length > 0 && cells[0] === '') cells.shift();
+      if (cells.length > 0 && cells[cells.length - 1] === '') cells.pop();
+      const rowObj: { [key: string]: string } = {};
+      headerCells.forEach(h => {
+        rowObj[h] = cells[headerCells.indexOf(h)] || '';
+      });
+      // Build new row in required order
+      const newRow = '| ' + requiredHeaders.map(h => rowObj[h] || '').join(' | ') + ' |';
+      return newRow;
+    });
+    lines = [newHeader, newSeparator, ...newRows];
+    headerCells = requiredHeaders;
+  }
+  // Now parse rows
   const nameIdx = headerCells.findIndex(h => h === 'name');
   const descIdx = headerCells.findIndex(h => h === 'description');
-  const popIdx = headerCells.findIndex(h => h === 'popularity');
-  const tipIdx = headerCells.findIndex(h => h === 'insider tips');
   const latIdx = headerCells.findIndex(h => h === 'latitude');
   const lonIdx = headerCells.findIndex(h => h === 'longitude');
+  const dataLines = lines.filter((_, i) => i > 1);
+  const markers: Array<{ name: string; description: string; lat: number; lon: number }> = [];
   dataLines.forEach(line => {
     const cells = line.split('|').map(cell => cell.trim());
     if (
-      cells.length > Math.max(nameIdx, descIdx, popIdx, tipIdx, latIdx, lonIdx) &&
+      cells.length > Math.max(nameIdx, descIdx, latIdx, lonIdx) &&
       latIdx !== -1 && lonIdx !== -1
     ) {
       const name = nameIdx !== -1 ? cells[nameIdx] : '';
@@ -106,12 +134,13 @@ export default function Map() {
   // Feedback states
   const [tilesChecked, setTilesChecked] = useState<number>(0);
   const [elementsRetrieved, setElementsRetrieved] = useState<number>(0);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   // Helper to estimate area covered by tiles (in m^2)
   function getTileAreaSqMeters(zoom: number, lat: number): number {
     // OSM tile size is 256x256 pixels, but we want area in meters
     // At zoom 17, tile width in degrees: 360 / 2^17
     // Use approximate formula for area at latitude
-    const earthRadius = 6378137; // meters
+    // const earthRadius = 6378137; // meters (unused)
     const tileCount = tilesChecked;
     if (!position || tileCount === 0) return 0;
     // Calculate tile width in degrees
@@ -141,7 +170,8 @@ export default function Map() {
         window.dispatchEvent(event);
       }
     }
-  }, [panelOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [panelOpen, position]); // tileBounds intentionally omitted: recomputed each render
 
   // On load, center on Zurich only, do not open panel
   useEffect(() => {
@@ -171,9 +201,42 @@ export default function Map() {
     }
   };
 
+  // tileBounds must be declared before useEffect
+  let tileBounds: [[number, number], [number, number]] | null = null;
+  if (position) {
+    const latLngToTile = (lat: number, lng: number, zoom: number) => {
+      const n = Math.pow(2, zoom);
+      const xtile = Math.floor(((lng + 180) / 360) * n);
+      const ytile = Math.floor(
+        ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * n
+      );
+      return { xtile, ytile };
+    };
+    const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
+    const range = Math.floor(gridSize / 2);
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    for (let dx = -range; dx <= range; dx++) {
+      for (let dy = -range; dy <= range; dy++) {
+        const x = xtile + dx;
+        const y = ytile + dy;
+        const [[lat1, lng1], [lat2, lng2]] = getTileBoundsXY(x, y, zoomLevel);
+        minLat = Math.min(minLat, lat1, lat2);
+        maxLat = Math.max(maxLat, lat1, lat2);
+        minLng = Math.min(minLng, lng1, lng2);
+        maxLng = Math.max(maxLng, lng1, lng2);
+      }
+    }
+    tileBounds = [
+      [minLat, minLng],
+      [maxLat, maxLng],
+    ];
+  }
+
   useEffect(() => {
     const fetchOsmWithGrid = async (grid: number): Promise<OsmElement[]> => {
       if (!position) return [];
+      setFetchError(null); // Clear any previous errors
+      
       function latLngToTile(lat: number, lng: number, zoom: number) {
         const n = Math.pow(2, zoom);
         const xtile = Math.floor(((lng + 180) / 360) * n);
@@ -199,8 +262,58 @@ export default function Map() {
         }
       }
       setTilesChecked(tileCount);
-      const res = await fetch(`/api/tile?minLat=${minLat}&minLng=${minLng}&maxLat=${maxLat}&maxLng=${maxLng}`);
-      if (!res.ok) return [];
+      
+      // Add retry logic for fetch requests
+      let res;
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
+        try {
+          res = await fetch(`/api/tile?minLat=${minLat}&minLng=${minLng}&maxLat=${maxLat}&maxLng=${maxLng}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            // Add timeout
+            signal: AbortSignal.timeout(30000), // 30 seconds timeout
+          });
+          
+          if (res.ok) break; // Success, exit retry loop
+          
+          if (res.status >= 500) {
+            // Server error, retry
+            attempts++;
+            if (attempts < maxAttempts) {
+              console.warn(`Server error (${res.status}), retrying... (${attempts}/${maxAttempts})`);
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempts)); // Exponential backoff
+              continue;
+            }
+          } else {
+            // Client error, don't retry
+            console.error(`Client error: ${res.status} ${res.statusText}`);
+            return [];
+          }
+        } catch (fetchError) {
+          attempts++;
+          console.error(`Fetch attempt ${attempts} failed:`, fetchError);
+          if (attempts < maxAttempts) {
+            console.warn(`Retrying fetch... (${attempts}/${maxAttempts})`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempts)); // Exponential backoff
+          } else {
+            console.error('All fetch attempts failed');
+            setFetchError('Failed to fetch data from server. Please try again.');
+            return [];
+          }
+        }
+      }
+      
+      if (!res || !res.ok) {
+        console.error('Failed to fetch OSM data after all attempts');
+        setFetchError('Server error. Please try again later.');
+        return [];
+      }
+      
       try {
         const data = await res.json();
         // Filter elements by allowedTags
@@ -209,7 +322,7 @@ export default function Map() {
           const filtered = data.elements.filter((el: OsmElement) => {
             if (!el.tags) return false;
             return Object.entries(el.tags).some(([key, value]) => allowedTags.has(`${key}:${value}`) || allowedTags.has(key));
-          }).map((el: any) => {
+          }).map((el: OsmElement) => {
             if (el.type === 'way' && el.nodeCoords && el.nodeCoords.length > 0) {
               const center = getWayCenter(el.nodeCoords);
               if (center) {
@@ -224,7 +337,9 @@ export default function Map() {
         }
         setElementsRetrieved(0);
         return [];
-      } catch {
+      } catch (jsonError) {
+        console.error('Failed to parse JSON response:', jsonError);
+        setFetchError('Invalid response from server. Please try again.');
         setElementsRetrieved(0);
         return [];
       }
@@ -232,6 +347,7 @@ export default function Map() {
 
     const runFetch = async () => {
       if (shouldFetchOsm && position) {
+        setFetchError(null); // Clear any previous errors
         let grid = gridSize;
         let elements: OsmElement[] = [];
         setTilesChecked(0);
@@ -264,47 +380,16 @@ export default function Map() {
     ];
   }
 
-  let tileBounds: [[number, number], [number, number]] | null = null;
-  if (position) {
-    const latLngToTile = (lat: number, lng: number, zoom: number) => {
-      const n = Math.pow(2, zoom);
-      const xtile = Math.floor(((lng + 180) / 360) * n);
-      const ytile = Math.floor(
-        ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * n
-      );
-      return { xtile, ytile };
-    };
-    const { xtile, ytile } = latLngToTile(position[0], position[1], zoomLevel);
-    const range = Math.floor(gridSize / 2);
-    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-    for (let dx = -range; dx <= range; dx++) {
-      for (let dy = -range; dy <= range; dy++) {
-        const x = xtile + dx;
-        const y = ytile + dy;
-        const [[lat1, lng1], [lat2, lng2]] = getTileBoundsXY(x, y, zoomLevel);
-        minLat = Math.min(minLat, lat1, lat2);
-        maxLat = Math.max(maxLat, lat1, lat2);
-        minLng = Math.min(minLng, lng1, lng2);
-        maxLng = Math.max(maxLng, lng1, lng2);
-      }
-    }
-    tileBounds = [
-      [minLat, minLng],
-      [maxLat, maxLng],
-    ];
-  }
-
-  // Custom hook to fit bounds when event is dispatched
   function FitBoundsListener() {
     const map = useMap();
     useEffect(() => {
-      const handler = (e: any) => {
+      const handler = (e: CustomEvent<[[number, number], [number, number]]>) => {
         if (e.detail) {
-          map.fitBounds([e.detail[0], e.detail[1]], { animate: true, padding: [40, 40] });
+          map.fitBounds(e.detail, { animate: true, padding: [40, 40] });
         }
       };
-      window.addEventListener('fitTileBounds', handler);
-      return () => window.removeEventListener('fitTileBounds', handler);
+      window.addEventListener('fitTileBounds', handler as EventListener);
+      return () => window.removeEventListener('fitTileBounds', handler as EventListener);
     }, [map]);
     return null;
   }
@@ -440,22 +525,28 @@ export default function Map() {
           </div>
           <div style={{ color: '#2563eb', fontWeight: 700, fontSize: '1.35rem', marginTop: 32, letterSpacing: 0.5 }}>Finding places around you…</div>
           <div style={{ color: '#2563eb', fontWeight: 700, fontSize: '1.35rem', marginTop: 18, letterSpacing: 0.2 }}>
-            {tilesChecked > 0 && position && (
-              (() => {
-                const areaSqMeters = getTileAreaSqMeters(zoomLevel, position[0]);
-                let areaText = '';
-                if (areaSqMeters > 1000000) {
-                  areaText = `${(areaSqMeters / 1000000).toFixed(2)} km²`;
-                } else if (areaSqMeters > 10000) {
-                  areaText = `${(areaSqMeters / 10000).toFixed(1)} ha`;
-                } else {
-                  areaText = `${Math.round(areaSqMeters).toLocaleString()} m²`;
-                }
-                return <span>Area covered: {areaText}</span>;
-              })()
-            )}
-            {elementsRetrieved > 0 && (
-              <span> &middot; {elementsRetrieved} element{elementsRetrieved > 1 ? 's' : ''} retrieved</span>
+            {fetchError ? (
+              <span style={{ color: '#dc2626', fontSize: '1.1rem' }}>{fetchError}</span>
+            ) : (
+              <>
+                {tilesChecked > 0 && position && (
+                  (() => {
+                    const areaSqMeters = getTileAreaSqMeters(zoomLevel, position[0]);
+                    let areaText = '';
+                    if (areaSqMeters > 1000000) {
+                      areaText = `${(areaSqMeters / 1000000).toFixed(2)} km²`;
+                    } else if (areaSqMeters > 10000) {
+                      areaText = `${(areaSqMeters / 10000).toFixed(1)} ha`;
+                    } else {
+                      areaText = `${Math.round(areaSqMeters).toLocaleString()} m²`;
+                    }
+                    return <span>Area covered: {areaText}</span>;
+                  })()
+                )}
+                {elementsRetrieved > 0 && (
+                  <span> &middot; {elementsRetrieved} element{elementsRetrieved > 1 ? 's' : ''} retrieved</span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -586,6 +677,7 @@ export default function Map() {
                       iconAnchor: [16, 32],
                       popupAnchor: [0, -32],
                     });
+                    // idx is only used for key and marker number, so no lint error
                     return (
                       <Marker key={idx} position={[marker.lat, marker.lon]} icon={numberIcon}>
                         <Popup>
@@ -599,23 +691,9 @@ export default function Map() {
                     );
                   })}
                 {/* Markers for OSM way elements (center) */}
-                {osmData && osmData.length > 0 && osmData.filter(el => el.type === 'way' && el.nodes && el.nodes.length > 0).map((el, idx) => {
-                  // Assume you have a way to get node coordinates for each node id (el.nodes)
-                  // For demo, use el.lat/el.lon if present, else skip
-                  // In real use, you need to fetch node coordinates from OSM API or cache
-                  // Here, we check if el has a 'nodeCoords' property (array of {lat, lon})
-                  // If not, skip
-                  // Example: el.nodeCoords = [{lat, lon}, ...]
-                  // If you have only node ids, you need to resolve them to coordinates
-                  // For now, skip if not present
-                  // This is a placeholder for actual node coordinate resolution
-                  // If you have nodeCoords, use getWayCenter
-                  // If not, skip
-                  // You may want to add this logic where you fetch OSM data
-                  // For now, demo only
-                  // @ts-ignore
+                {osmData && osmData.length > 0 && osmData.filter(el => el.type === 'way' && el.nodes && el.nodes.length > 0).map((el) => {
+                  // ...existing code...
                   if (!el.nodeCoords || el.nodeCoords.length === 0) return null;
-                  // @ts-ignore
                   const center = getWayCenter(el.nodeCoords);
                   if (!center) return null;
                   const wayIcon = L.divIcon({
