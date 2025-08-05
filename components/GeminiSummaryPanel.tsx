@@ -57,7 +57,7 @@ const GeminiSummaryPanel: React.FC<GeminiSummaryPanelProps> = ({
               const description = cells[2] || '';
               const bestFor = cells[3] || '';
               const insiderTips = cells[4] || '';
-              const label = `${name}: ${description}${bestFor ? ' | Best for: ' + bestFor : ''}${insiderTips ? ' | Tip: ' + insiderTips : ''}`;
+              const label = `${name}: ${description}${bestFor ? ' | Popularity: ' + bestFor : ''}${insiderTips ? ' | Tip: ' + insiderTips : ''}`;
               if (!label.trim() || /^:?\u0002*$/.test(label.trim()) || label.trim() === ':') {
                 return null;
               }

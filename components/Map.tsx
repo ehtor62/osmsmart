@@ -187,7 +187,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude, pos.coords.longitude]);
+          setPosition([pos.coords.latitude, pos.coords.longitude+4]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -404,7 +404,16 @@ export default function Map() {
 
   // Handler for Gemini fact report (left panel)
   const onAskFactReport = async (label: string) => {
-    const prompt = `Write a detailed, fact-based report about the following place. Consult relevant websites and only use facts that can be verified there. Do not repeat the input content. Do not use any tabular format or markdown table in your output. Only provide a narrative report. Go beyond the provided information and provide unique, deeply researched insights about this place: ${label}`;
+    const prompt = `Write a detailed, fact-based report about the following place. Consult relevant websites and only use facts that can be verified there. Do not repeat the input content. 
+
+CRITICAL REQUIREMENTS:
+- ABSOLUTELY NO TABLES, MARKDOWN TABLES, OR TABULAR FORMAT OF ANY KIND
+- NO STRUCTURED DATA like "| Name | Description |" or "---" separators
+- NO columns, rows, or table headers
+- ONLY continuous narrative text in paragraph form
+- Do not end with any table or structured summary
+
+Write ONLY in flowing paragraph format. Go beyond the provided information and provide unique, deeply researched insights about this place: ${label}`;
     console.debug('[Gemini Fact Report] Prompt sent to Gemini:', prompt);
     // Try to find the OSM element that matches the label (by name and description)
     let element = null;
@@ -441,7 +450,19 @@ export default function Map() {
         }),
       });
       const result = await response.json();
-      setLeftPanelContent(result.answer || "No summary available.");
+      let content = result.answer || "No summary available.";
+      
+      // Remove any markdown tables that might have slipped through
+      // Remove table headers and separators
+      content = content.replace(/\|\s*[^|\n]*\s*\|[\s\S]*?\n\|[-\s|]*\|[\s\S]*?(?=\n\n|$)/g, '');
+      // Remove any remaining table-like structures
+      content = content.replace(/\|[^|\n]*\|/g, '');
+      // Remove multiple consecutive newlines
+      content = content.replace(/\n{3,}/g, '\n\n');
+      // Trim whitespace
+      content = content.trim();
+      
+      setLeftPanelContent(content);
     } catch {
       setLeftPanelContent("Error retrieving summary.");
     }
