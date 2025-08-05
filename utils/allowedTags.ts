@@ -63,7 +63,7 @@ export const tagGroups = {
     'geological:tor',
     'geological:inselberg',
     'leisure:bird_hide',
-    'leisure:garden',
+    //'leisure:garden',
     'leisure:nature_reserve',
     'natural:beach',
     'natural:blowhole',

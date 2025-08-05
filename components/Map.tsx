@@ -14,15 +14,68 @@ type OsmElement = {
 // Helper to compute center of a way element
 function getWayCenter(nodeCoords: Array<{ lat: number; lon: number }>): { lat: number; lon: number } | null {
   if (!nodeCoords || nodeCoords.length === 0) return null;
-  // If closed polygon, could use a polygon centroid algorithm, but average is fine for most cases
-  const sum = nodeCoords.reduce((acc, node) => ({
-    lat: acc.lat + node.lat,
-    lon: acc.lon + node.lon
-  }), { lat: 0, lon: 0 });
-  return {
-    lat: sum.lat / nodeCoords.length,
-    lon: sum.lon / nodeCoords.length
-  };
+  
+  // For simple cases (lines or small polygons), use arithmetic centroid
+  if (nodeCoords.length <= 3) {
+    const sum = nodeCoords.reduce((acc, node) => ({
+      lat: acc.lat + node.lat,
+      lon: acc.lon + node.lon
+    }), { lat: 0, lon: 0 });
+    return {
+      lat: sum.lat / nodeCoords.length,
+      lon: sum.lon / nodeCoords.length
+    };
+  }
+  
+  // For polygons with 4+ nodes, use geometric centroid for better accuracy
+  // Check if it's a closed polygon (first and last points are the same)
+  const isClosedPolygon = nodeCoords.length >= 4 && 
+    Math.abs(nodeCoords[0].lat - nodeCoords[nodeCoords.length - 1].lat) < 0.0001 &&
+    Math.abs(nodeCoords[0].lon - nodeCoords[nodeCoords.length - 1].lon) < 0.0001;
+  
+  if (isClosedPolygon) {
+    // Calculate polygon centroid using the shoelace formula
+    let area = 0;
+    let centroidLat = 0;
+    let centroidLon = 0;
+    
+    for (let i = 0; i < nodeCoords.length - 1; i++) {
+      const curr = nodeCoords[i];
+      const next = nodeCoords[i + 1];
+      const crossProduct = curr.lon * next.lat - next.lon * curr.lat;
+      area += crossProduct;
+      centroidLat += (curr.lat + next.lat) * crossProduct;
+      centroidLon += (curr.lon + next.lon) * crossProduct;
+    }
+    
+    area = area / 2;
+    if (Math.abs(area) < 0.000001) {
+      // Fallback to arithmetic centroid for degenerate polygons
+      const sum = nodeCoords.reduce((acc, node) => ({
+        lat: acc.lat + node.lat,
+        lon: acc.lon + node.lon
+      }), { lat: 0, lon: 0 });
+      return {
+        lat: sum.lat / nodeCoords.length,
+        lon: sum.lon / nodeCoords.length
+      };
+    }
+    
+    return {
+      lat: centroidLat / (6 * area),
+      lon: centroidLon / (6 * area)
+    };
+  } else {
+    // For open ways (lines), use arithmetic centroid
+    const sum = nodeCoords.reduce((acc, node) => ({
+      lat: acc.lat + node.lat,
+      lon: acc.lon + node.lon
+    }), { lat: 0, lon: 0 });
+    return {
+      lat: sum.lat / nodeCoords.length,
+      lon: sum.lon / nodeCoords.length
+    };
+  }
 }
 import { useEffect, useState } from "react";
 import { allowedTags } from "../utils/allowedTags";
@@ -187,7 +240,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude, pos.coords.longitude+4]);
+          setPosition([pos.coords.latitude, pos.coords.longitude]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -276,7 +329,7 @@ export default function Map() {
               'Content-Type': 'application/json',
             },
             // Add timeout
-            signal: AbortSignal.timeout(30000), // 30 seconds timeout
+            signal: AbortSignal.timeout(45000), // 45 seconds timeout
           });
           
           if (res.ok) break; // Success, exit retry loop
@@ -316,9 +369,21 @@ export default function Map() {
       
       try {
         const data = await res.json();
+        console.log('OSM API Response sample:', data?.elements?.slice(0, 3)); // Debug log
         // Filter elements by allowedTags
         if (data && data.elements) {
-          // For way elements, if nodeCoords are present, set lat/lon to center
+          const wayElements = data.elements.filter((el: OsmElement) => el.type === 'way');
+          console.log(`Found ${wayElements.length} way elements in OSM data`);
+          if (wayElements.length > 0) {
+            console.log('Sample way element:', wayElements[0]);
+            console.log('Sample way element keys:', Object.keys(wayElements[0]));
+            // Check if it has nodeCoords field (should be populated by backend now)
+            if (wayElements[0].nodeCoords) {
+              console.log('Way has nodeCoords field:', wayElements[0].nodeCoords.length, 'coordinates');
+            }
+          }
+          
+          // Filter and process elements (backend now provides nodeCoords for ways)
           const filtered = data.elements.filter((el: OsmElement) => {
             if (!el.tags) return false;
             return Object.entries(el.tags).some(([key, value]) => allowedTags.has(`${key}:${value}`) || allowedTags.has(key));
@@ -328,6 +393,7 @@ export default function Map() {
               if (center) {
                 el.lat = center.lat;
                 el.lon = center.lon;
+                console.log(`Way ${el.id} center set to:`, center);
               }
             }
             return el;
@@ -361,7 +427,7 @@ export default function Map() {
         setOsmData(elements);
         setShowSpinner(false); // Hide spinner only after OSM data is fetched
         setPanelOpen(true);
-        setGridSize(grid); // for rectangle
+        setGridSize(grid); // Update gridSize to match the final grid used for fetching
         setShouldFetchOsm(false);
       }
     };
@@ -712,30 +778,38 @@ Write ONLY in flowing paragraph format. Go beyond the provided information and p
                     );
                   })}
                 {/* Markers for OSM way elements (center) */}
-                {osmData && osmData.length > 0 && osmData.filter(el => el.type === 'way' && el.nodes && el.nodes.length > 0).map((el) => {
-                  // ...existing code...
-                  if (!el.nodeCoords || el.nodeCoords.length === 0) return null;
-                  const center = getWayCenter(el.nodeCoords);
-                  if (!center) return null;
-                  const wayIcon = L.divIcon({
-                    className: 'way-marker',
-                    html: `<div style="background:#059669;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.10);">W</div>`,
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 28],
-                    popupAnchor: [0, -28],
-                  });
-                  return (
-                    <Marker key={`way-${el.id}`} position={[center.lat, center.lon]} icon={wayIcon}>
-                      <Popup>
-                        <div style={{ maxWidth: 300 }}>
-                          <div className="font-bold mb-1">Way #{el.id}</div>
-                          <div>{el.tags?.name || 'Unnamed way'}</div>
-                          <div className="text-xs text-gray-700">center: lat: {center.lat.toFixed(6)}, lon: {center.lon.toFixed(6)}</div>
-                        </div>
-                      </Popup>
-                    </Marker>
+                {osmData && osmData.length > 0 && (() => {
+                  const wayElements = osmData.filter(el => 
+                    el.type === 'way' && 
+                    el.lat !== undefined && 
+                    el.lon !== undefined &&
+                    el.tags?.name && // Only show markers for named ways
+                    el.tags.name.trim() !== '' // Ensure name is not empty
                   );
-                })}
+                  console.log('Total way elements with coordinates and names:', wayElements.length);
+                  return wayElements.map((el) => {
+                    // Way elements already have lat/lon set by getWayCenter during data processing
+                    if (el.lat === undefined || el.lon === undefined) return null;
+                    const wayIcon = L.divIcon({
+                      className: 'way-marker',
+                      html: `<div style="background:#059669;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.10);">W</div>`,
+                      iconSize: [28, 28],
+                      iconAnchor: [14, 28],
+                      popupAnchor: [0, -28],
+                    });
+                    return (
+                      <Marker key={`way-${el.id}`} position={[el.lat, el.lon]} icon={wayIcon}>
+                        <Popup>
+                          <div style={{ maxWidth: 300 }}>
+                            <div className="font-bold mb-1">Way #{el.id}</div>
+                            <div>{el.tags?.name || 'Unnamed way'}</div>
+                            <div className="text-xs text-gray-700">center: lat: {el.lat.toFixed(6)}, lon: {el.lon.toFixed(6)}</div>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  });
+                })()}
                 {tileBounds && osmData && osmData.length > 0 && (
                   <Rectangle bounds={tileBounds} pathOptions={{ color: "red", weight: 2 }} />
                 )}

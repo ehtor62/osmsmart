@@ -24,19 +24,80 @@ function bboxString(bbox: { minLat: number; minLng: number; maxLat: number; maxL
   return `${bbox.minLat},${bbox.minLng},${bbox.maxLat},${bbox.maxLng}`;
 }
 
-// Helper: Process OSM data (identity for demo)
+// Helper: Process OSM data and resolve way coordinates
+interface OSMElement {
+  id: number;
+  type: string;
+  lat?: number;
+  lon?: number;
+  tags?: Record<string, string>;
+  nodes?: number[];
+  nodeCoords?: Array<{ lat: number; lon: number }>;
+}
+
 interface OSMData {
-  elements: unknown[];
+  elements: OSMElement[];
   [key: string]: unknown;
 }
+
+// Helper: Resolve way node coordinates
+function resolveWayCoordinates(osmData: OSMData): OSMData {
+  if (!osmData.elements || !Array.isArray(osmData.elements)) {
+    return osmData;
+  }
+
+  // Create a map of node ID -> coordinates for fast lookup
+  const nodeMap = new Map<number, { lat: number; lon: number }>();
+  
+  // First pass: collect all nodes
+  osmData.elements.forEach((element: OSMElement) => {
+    if (element.type === 'node' && element.lat !== undefined && element.lon !== undefined) {
+      nodeMap.set(element.id, { lat: element.lat, lon: element.lon });
+    }
+  });
+
+  // Second pass: resolve way coordinates
+  const processedElements = osmData.elements.map((element: OSMElement): OSMElement => {
+    if (element.type === 'way' && element.nodes && Array.isArray(element.nodes)) {
+      // Resolve node coordinates for this way
+      const nodeCoords: Array<{ lat: number; lon: number }> = [];
+      
+      element.nodes.forEach((nodeId: number) => {
+        const nodeCoord = nodeMap.get(nodeId);
+        if (nodeCoord) {
+          nodeCoords.push(nodeCoord);
+        }
+      });
+      
+      // Add nodeCoords to the way element if we found coordinates
+      if (nodeCoords.length > 0) {
+        return {
+          ...element,
+          nodeCoords: nodeCoords
+        };
+      }
+    }
+    
+    return element;
+  });
+
+  return {
+    ...osmData,
+    elements: processedElements
+  };
+}
+
 function processOsmData(osmData: OSMData): OSMData {
-  // Filter out elements with exactly one key
-  const filteredElements = Array.isArray(osmData.elements)
-    ? osmData.elements.filter((el) =>
+  // First resolve way coordinates
+  const withCoordinates = resolveWayCoordinates(osmData);
+  
+  // Then filter out elements with exactly one key
+  const filteredElements = Array.isArray(withCoordinates.elements)
+    ? withCoordinates.elements.filter((el) =>
         el && typeof el === "object" && Object.keys(el).length !== 1
       )
     : [];
-  return { ...osmData, elements: filteredElements };
+  return { ...withCoordinates, elements: filteredElements };
 }
 
 export async function GET(req: NextRequest) {
@@ -79,7 +140,14 @@ export async function GET(req: NextRequest) {
 
     // 2. Cache MISS: Generate tile
     const bboxStr = bboxString(bbox);
-    const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];(node(${bboxStr});way(${bboxStr});relation(${bboxStr}););out;`;
+    // Simple, fast query - get nodes and ways separately
+    const overpassQuery = `[out:json][timeout:15];
+    (
+      node(${bboxStr});
+      way(${bboxStr});
+    );
+    out;`;
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
     const overpassRes = await fetch(overpassUrl);
     if (!overpassRes.ok) {
       console.error("Overpass API error", await overpassRes.text());
