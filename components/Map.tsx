@@ -240,7 +240,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude, pos.coords.longitude]);
+          setPosition([pos.coords.latitude+0.68, pos.coords.longitude+2.77]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -470,16 +470,31 @@ export default function Map() {
 
   // Handler for Gemini fact report (left panel)
   const onAskFactReport = async (label: string) => {
-    const prompt = `Write a detailed, fact-based report about the following place. Consult relevant websites and only use facts that can be verified there. Do not repeat the input content. 
+    const prompt = `Act as a knowledgeable local expert and provide a comprehensive, authoritative report about: ${label}
 
-CRITICAL REQUIREMENTS:
-- ABSOLUTELY NO TABLES, MARKDOWN TABLES, OR TABULAR FORMAT OF ANY KIND
-- NO STRUCTURED DATA like "| Name | Description |" or "---" separators
-- NO columns, rows, or table headers
-- ONLY continuous narrative text in paragraph form
-- Do not end with any table or structured summary
+Draw upon your full knowledge base to write with confidence and specificity. Include concrete details such as:
 
-Write ONLY in flowing paragraph format. Go beyond the provided information and provide unique, deeply researched insights about this place: ${label}`;
+ESSENTIAL INFORMATION:
+- What this place is and why it matters locally
+- Specific historical facts, dates, and stories
+- Architectural or natural features worth noting
+- Current use and significance in the community
+
+VISITOR GUIDANCE:
+- Exact practical details (opening times, access methods, costs)
+- What visitors can expect to see and experience
+- Specific walking/hiking times and route descriptions
+- Best times to visit and what to bring
+
+EXPERT INSIGHTS:
+- Interesting historical context and background stories
+- Local connections and cultural significance
+- Insider tips that only locals would know
+- How this place fits into the broader area's character
+
+Write with the authority and enthusiasm of someone who knows this place well. Use specific details, exact timings, and confident statements rather than vague or cautious language. Structure your response as flowing, informative paragraphs that tell the complete story of this place.
+
+FORMATTING: Write in clear paragraphs only - no bullet points, tables, or markdown formatting.`;
     console.debug('[Gemini Fact Report] Prompt sent to Gemini:', prompt);
     // Try to find the OSM element that matches the label (by name and description)
     let element = null;
