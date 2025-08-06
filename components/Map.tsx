@@ -85,6 +85,7 @@ import OsmDataPanel from "./OsmDataPanel";
 import GeminiSummaryPanel from "./GeminiSummaryPanel";
 import FactReportPanel, { useFactReportLogic } from "./FactReportPanel";
 import GeminiMarkers from "./GeminiMarkers";
+import LoadingSpinner from "./LoadingSpinner";
 // CenterMap helper must be defined before use
 function CenterMap({ position }: { position: [number, number] }) {
   const map = useMap();
@@ -177,7 +178,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude+0.68, pos.coords.longitude+2.77]);
+          setPosition([pos.coords.latitude+0.68, pos.coords.longitude+2.76]);
           setShouldFetchOsm(true);
         },
         () => {
@@ -414,107 +415,26 @@ export default function Map() {
 
   return (
     <>
-      {/* Spinner overlay for Gemini summary */}
-      {showGeminiSpinner && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            background: 'rgba(30, 41, 59, 0.25)',
-            zIndex: 7000,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{
-            border: '6px solid #e5e7eb',
-            borderTop: '6px solid #2563eb',
-            borderRadius: '50%',
-            width: 64,
-            height: 64,
-            animation: 'spin 1s linear infinite',
-            marginBottom: 24,
-          }} />
-          <div style={{ color: '#2563eb', fontWeight: 600, fontSize: '1.15rem', letterSpacing: 0.5 }}>asking local guides…</div>
-          <style>{`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}</style>
-        </div>
-      )}
-      {/* Modern large spinner overlay, visible until side panel opens */}
-      {showSpinner && !panelOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            background: 'rgba(30, 41, 59, 0.25)',
-            zIndex: 6000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-          }}
-        >
-          <div style={{
-            width: 120,
-            height: 120,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="60" cy="60" r="52" stroke="#e5e7eb" strokeWidth="12" />
-              <circle cx="60" cy="60" r="52" stroke="#2563eb" strokeWidth="12" strokeDasharray="120 120" strokeDashoffset="60" style={{
-                transformOrigin: 'center',
-                animation: 'spin-modern 1.2s linear infinite',
-              }} />
-              <style>{`
-                @keyframes spin-modern {
-                  0% { transform: rotate(0deg); }
-                  100% { transform: rotate(360deg); }
-                }
-              `}</style>
-            </svg>
-          </div>
-          <div style={{ color: '#2563eb', fontWeight: 700, fontSize: '1.35rem', marginTop: 32, letterSpacing: 0.5 }}>Finding places around you…</div>
-          <div style={{ color: '#2563eb', fontWeight: 700, fontSize: '1.35rem', marginTop: 18, letterSpacing: 0.2 }}>
-            {fetchError ? (
-              <span style={{ color: '#dc2626', fontSize: '1.1rem' }}>{fetchError}</span>
-            ) : (
-              <>
-                {tilesChecked > 0 && position && (
-                  (() => {
-                    const areaSqMeters = getTileAreaSqMeters(zoomLevel, position[0]);
-                    let areaText = '';
-                    if (areaSqMeters > 1000000) {
-                      areaText = `${(areaSqMeters / 1000000).toFixed(2)} km²`;
-                    } else if (areaSqMeters > 10000) {
-                      areaText = `${(areaSqMeters / 10000).toFixed(1)} ha`;
-                    } else {
-                      areaText = `${Math.round(areaSqMeters).toLocaleString()} m²`;
-                    }
-                    return <span>Area covered: {areaText}</span>;
-                  })()
-                )}
-                {elementsRetrieved > 0 && (
-                  <span> &middot; {elementsRetrieved} element{elementsRetrieved > 1 ? 's' : ''} retrieved</span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Gemini Loading Spinner */}
+      <LoadingSpinner
+        show={showGeminiSpinner}
+        type="gemini"
+        message="asking local guides…"
+        zIndex={7000}
+      />
+      {/* Modern Loading Spinner */}
+      <LoadingSpinner
+        show={showSpinner && !panelOpen}
+        type="modern"
+        message="Finding places around you…"
+        zIndex={6000}
+        fetchError={fetchError}
+        tilesChecked={tilesChecked}
+        elementsRetrieved={elementsRetrieved}
+        position={position}
+        getTileAreaSqMeters={getTileAreaSqMeters}
+        zoomLevel={zoomLevel}
+      />
       <div className="w-screen h-screen flex flex-row" style={{ position: 'relative' }}>
         <InitialModal
           show={showInitModal}
