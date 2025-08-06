@@ -1,15 +1,6 @@
 import React from "react";
 import { getTagGroup } from "../utils/allowedTags";
-
-type OsmElement = {
-  id: number;
-  type: string;
-  lat?: number;
-  lon?: number;
-  tags?: Record<string, string>;
-  nodes?: number[];
-  members?: Array<{ type: string; ref: number; role: string }>;
-};
+import type { OsmElement } from "../types/osm";
 
 interface OsmDataPanelProps {
   open: boolean;

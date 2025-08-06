@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { useFetchOsmData, type OsmElement } from "../hooks/useFetchOsmData";
+import { useFetchOsmData } from "../hooks/useFetchOsmData";
+import type { OsmElement } from "../types/osm";
 import InitialModal from "./InitialModal";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle } from "react-leaflet";
 import OsmDataPanel from "./OsmDataPanel";
@@ -106,7 +107,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude+0.69, pos.coords.longitude+2.73]);
+          setPosition([pos.coords.latitude+0.72, pos.coords.longitude+2.73]);
           setShouldFetchOsm(true);
         },
         () => {

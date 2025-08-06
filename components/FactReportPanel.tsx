@@ -1,16 +1,6 @@
 "use client";
 
-// OSM element type definition
-type OsmElement = {
-  id: number;
-  type: string;
-  lat?: number;
-  lon?: number;
-  tags?: Record<string, string>;
-  nodes?: number[];
-  members?: Array<{ type: string; ref: number; role: string }>;
-  nodeCoords?: Array<{ lat: number; lon: number }>;
-};
+import type { OsmElement } from "../types/osm";
 
 interface FactReportPanelProps {
   open: boolean;

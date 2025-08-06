@@ -5,18 +5,7 @@ import {
   latLngToTile, 
   getTileBoundsXY 
 } from "../components/MapHelpers";
-
-// OSM element type definition
-export type OsmElement = {
-  id: number;
-  type: string;
-  lat?: number;
-  lon?: number;
-  tags?: Record<string, string>;
-  nodes?: number[];
-  members?: Array<{ type: string; ref: number; role: string }>;
-  nodeCoords?: Array<{ lat: number; lon: number }>;
-};
+import type { OsmElement } from "../types/osm";
 
 export interface UseFetchOsmDataProps {
   shouldFetchOsm: boolean;
