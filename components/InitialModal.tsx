@@ -4,10 +4,9 @@ interface InitialModalProps {
   show: boolean;
   onFindLocation: () => void;
   onSpecificInterest: () => void;
-  onClose: () => void;
 }
 
-const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onSpecificInterest, onClose }) => {
+const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onSpecificInterest }) => {
   if (!show) return null;
   return (
     <div

@@ -266,7 +266,6 @@ export default function Map() {
           show={showInitModal}
           onFindLocation={handleFindLocation}
           onSpecificInterest={handleSpecificInterest}
-          onClose={() => setShowInitModal(false)}
         />
         <InterestSelectionModal
           show={showInterestModal}
