@@ -3,10 +3,11 @@ import React from "react";
 interface InitialModalProps {
   show: boolean;
   onFindLocation: () => void;
+  onSpecificInterest: () => void;
   onClose: () => void;
 }
 
-const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onClose }) => {
+const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onSpecificInterest, onClose }) => {
   if (!show) return null;
   return (
     <div
@@ -83,7 +84,7 @@ const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onClo
               boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
               transition: 'background 0.2s',
             }}
-            onClick={onClose}
+            onClick={onSpecificInterest}
           >
             I have a specific interest
           </button>

@@ -83,7 +83,12 @@ const OsmDataPanel: React.FC<OsmDataPanelProps> = ({ open, osmData, loadingSumma
           {loadingSummary ? "Summarizing..." : "Summarize"}
         </button>
         <div style={{ marginBottom: 12, textAlign: 'center', color: '#2563eb', fontWeight: 500, fontSize: '0.95rem' }}>
-          {totalElements ? `${totalElements} element${totalElements === 1 ? '' : 's'} found` : 'Loading...'}
+          {osmData === null 
+            ? 'Loading...' 
+            : totalElements 
+              ? `${totalElements} element${totalElements === 1 ? '' : 's'} found` 
+              : 'Nothing found.'
+          }
         </div>
         
         {osmData ? (

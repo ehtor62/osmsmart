@@ -12,6 +12,7 @@ export interface UseFetchOsmDataProps {
   position: [number, number] | null;
   gridSize: number;
   zoomLevel: number;
+  filteredTags?: Set<string>; // Optional filtered tags for specific interests
   onDataFetched: (data: OsmElement[]) => void;
   onSpinnerToggle: (show: boolean) => void;
   onPanelOpen: () => void;
@@ -33,6 +34,7 @@ export function useFetchOsmData({
   position,
   gridSize,
   zoomLevel,
+  filteredTags,
   onDataFetched,
   onSpinnerToggle,
   onPanelOpen,
@@ -140,9 +142,34 @@ export function useFetchOsmData({
           }
           
           // Filter and process elements (backend now provides nodeCoords for ways)
+          const tagsToUse = filteredTags && filteredTags.size > 0 ? filteredTags : allowedTags;
+          console.log('Using tags for filtering:', tagsToUse.size, 'tags');
+          if (filteredTags && filteredTags.size > 0) {
+            console.log('Filtered tags being used:', Array.from(filteredTags));
+          }
+          
           const filtered = data.elements.filter((el: OsmElement) => {
             if (!el.tags) return false;
-            return Object.entries(el.tags).some(([key, value]) => allowedTags.has(`${key}:${value}`) || allowedTags.has(key));
+            // Check if any tag matches our allowed tags
+            const hasMatchingTag = Object.entries(el.tags).some(([key, value]) => {
+              const fullTag = `${key}:${value}`;
+              const keyOnlyMatch = tagsToUse.has(key);
+              const fullTagMatch = tagsToUse.has(fullTag);
+              
+              if (filteredTags && filteredTags.size > 0) {
+                // When using filtered tags, be more strict - prefer full tag matches
+                return fullTagMatch || keyOnlyMatch;
+              } else {
+                // Original behavior for general exploration
+                return fullTagMatch || keyOnlyMatch;
+              }
+            });
+            
+            if (hasMatchingTag && filteredTags && filteredTags.size > 0) {
+              console.log('Element passed filter:', el.id, Object.entries(el.tags).map(([k,v]) => `${k}:${v}`));
+            }
+            
+            return hasMatchingTag;
           }).map((el: OsmElement) => {
             if (el.type === 'way' && el.nodeCoords && el.nodeCoords.length > 0) {
               const center = getWayCenter(el.nodeCoords);
@@ -154,6 +181,12 @@ export function useFetchOsmData({
             }
             return el;
           });
+          
+          console.log(`Filtered ${filtered.length} elements from ${data.elements.length} total elements`);
+          if (filteredTags && filteredTags.size > 0) {
+            console.log('Filter summary: Found', filtered.length, 'matching elements for filtered tags');
+          }
+          
           setElementsRetrieved(filtered.length);
           onElementsRetrievedUpdate?.(filtered.length);
           return filtered;
@@ -195,7 +228,7 @@ export function useFetchOsmData({
       }
     };
     runFetch();
-  }, [shouldFetchOsm, position, gridSize, zoomLevel, onDataFetched, onSpinnerToggle, onPanelOpen, onGridSizeUpdate, onFetchComplete, onTilesCheckedUpdate, onElementsRetrievedUpdate, onFetchErrorUpdate]);
+  }, [shouldFetchOsm, position, gridSize, zoomLevel, filteredTags, onDataFetched, onSpinnerToggle, onPanelOpen, onGridSizeUpdate, onFetchComplete, onTilesCheckedUpdate, onElementsRetrievedUpdate, onFetchErrorUpdate]);
 
   return {
     tilesChecked,
