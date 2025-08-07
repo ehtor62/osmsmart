@@ -117,7 +117,7 @@ export default function Map() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition([pos.coords.latitude+0.69, pos.coords.longitude+2.82]);
+          setPosition([pos.coords.latitude, pos.coords.longitude]);
           setShouldFetchOsm(true);
         },
         () => {

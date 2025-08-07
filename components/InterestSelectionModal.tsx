@@ -14,11 +14,20 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
 
   const interests = [
-    { id: 'transport', label: 'Transport' },
+    { id: 'entertainment', label: 'Entertainment' },
+    { id: 'eating', label: 'Eating' },
+    { id: 'drinking', label: 'Drinking' },
     { id: 'sport', label: 'Sport' },
-    { id: 'health', label: 'Health' },
-    { id: 'food', label: 'Food' }
-  ];
+    { id: 'culture', label: 'Culture' },
+    { id: 'history', label: 'History' },
+    { id: 'nature', label: 'Nature' },
+    { id: 'cars', label: 'Cars' },
+    { id: 'bus', label: 'Bus' },
+    { id: 'bikes', label: 'Bikes' },
+    { id: 'water_transport', label: 'Water_Transport' },
+    { id: 'air_transport', label: 'Air_Transport' },
+    { id: 'rail', label: 'Rail' }
+    ];
 
   const handleInterestToggle = (interestId: string) => {
     setSelectedInterests(prev => 
@@ -61,8 +70,10 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
           borderRadius: 16,
           boxShadow: '0 4px 32px rgba(0,0,0,0.15)',
           padding: '32px 40px',
-          minWidth: 360,
-          maxWidth: 480,
+          minWidth: 600,
+          maxWidth: 700,
+          maxHeight: '90vh',
+          overflowY: 'auto',
           textAlign: 'center',
           display: 'flex',
           flexDirection: 'column',
@@ -89,9 +100,9 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
         </p>
 
         <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 12,
           textAlign: 'left',
           margin: '8px 0'
         }}>
@@ -101,9 +112,9 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 12,
+                gap: 8,
                 cursor: 'pointer',
-                padding: '12px 16px',
+                padding: '10px 12px',
                 borderRadius: 8,
                 background: selectedInterests.includes(interest.id) 
                   ? 'rgba(37, 99, 235, 0.1)' 
@@ -112,6 +123,7 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
                   ? '2px solid #2563eb'
                   : '2px solid #e2e8f0',
                 transition: 'all 0.2s ease',
+                fontSize: '0.9rem',
               }}
               onMouseEnter={(e) => {
                 if (!selectedInterests.includes(interest.id)) {
@@ -131,17 +143,21 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
                 checked={selectedInterests.includes(interest.id)}
                 onChange={() => handleInterestToggle(interest.id)}
                 style={{
-                  width: 18,
-                  height: 18,
+                  width: 16,
+                  height: 16,
                   accentColor: '#2563eb',
                   cursor: 'pointer',
+                  flexShrink: 0,
                 }}
               />
               <span style={{
-                fontSize: '1rem',
+                fontSize: '0.9rem',
                 fontWeight: 500,
                 color: '#334155',
                 flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}>
                 {interest.label}
               </span>
