@@ -14,19 +14,19 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
 
   const interests = [
-    { id: 'entertainment', label: 'Entertainment' },
-    { id: 'eating', label: 'Eating' },
-    { id: 'drinking', label: 'Drinking' },
-    { id: 'sport', label: 'Sport' },
-    { id: 'culture', label: 'Culture' },
-    { id: 'history', label: 'History' },
-    { id: 'nature', label: 'Nature' },
-    { id: 'cars', label: 'Cars' },
-    { id: 'bus', label: 'Bus' },
-    { id: 'bikes', label: 'Bikes' },
-    { id: 'water_transport', label: 'Water_Transport' },
-    { id: 'air_transport', label: 'Air_Transport' },
-    { id: 'rail', label: 'Rail' }
+    { id: 'Entertainment', label: 'Entertainment' },
+    { id: 'Eating', label: 'Eating' },
+    { id: 'Drinking', label: 'Drinking' },
+    { id: 'Sport', label: 'Sport' },
+    { id: 'Culture', label: 'Culture' },
+    { id: 'History', label: 'History' },
+    { id: 'Nature', label: 'Nature' },
+    { id: 'Cars', label: 'Cars' },
+    { id: 'Bus', label: 'Bus' },
+    { id: 'Bikes', label: 'Bikes' },
+    { id: 'Water_Transport', label: 'Water Transport' },
+    { id: 'Air_Transport', label: 'Air Transport' },
+    { id: 'Rail', label: 'Rail' }
     ];
 
   const handleInterestToggle = (interestId: string) => {

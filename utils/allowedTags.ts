@@ -39,7 +39,7 @@ export const tagGroups = {
   Cars: [
     'amenity:weighbridge',
     'amenity:taxi',
-    'amenity:parking',
+    //'amenity:parking',
     'highway:hitchhiking',
     'amenity:car_rental',
     'amenity:car_sharing',
