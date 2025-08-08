@@ -14,19 +14,28 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
 
   const interests = [
-    { id: 'Entertainment', label: 'Entertainment' },
-    { id: 'Eating', label: 'Eating' },
-    { id: 'Drinking', label: 'Drinking' },
-    { id: 'Sport', label: 'Sport' },
+    { id: 'Accommodation', label: 'Accommodation' },
+    { id: 'Air_Transport', label: 'Air Transport' },
+    { id: 'Bikes', label: 'Bikes' },
+    { id: 'Bus', label: 'Bus' },
+    { id: 'Cars', label: 'Cars' },
+    { id: 'Craft', label: 'Craft' },
     { id: 'Culture', label: 'Culture' },
+    { id: 'Drinking', label: 'Drinking' },
+    { id: 'Eating', label: 'Eating' },
+    { id: 'Education', label: 'Education' },
+    { id: 'Entertainment', label: 'Entertainment' },
+    { id: 'Financial', label: 'Financial' },
+    { id: 'Health', label: 'Health' },
     { id: 'History', label: 'History' },
     { id: 'Nature', label: 'Nature' },
-    { id: 'Cars', label: 'Cars' },
-    { id: 'Bus', label: 'Bus' },
-    { id: 'Bikes', label: 'Bikes' },
-    { id: 'Water_Transport', label: 'Water Transport' },
-    { id: 'Air_Transport', label: 'Air Transport' },
-    { id: 'Rail', label: 'Rail' }
+    { id: 'Public_Service', label: 'Public Service' },
+    { id: 'Rail', label: 'Rail' },
+    { id: 'Shopping', label: 'Shopping' },
+    { id: 'Sport', label: 'Sport' },
+    { id: 'Tourism', label: 'Tourism' },
+    { id: 'Traffic', label: 'Traffic' },
+    { id: 'Water_Transport', label: 'Water Transport' }
     ];
 
   const handleInterestToggle = (interestId: string) => {
