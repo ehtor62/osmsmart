@@ -69,19 +69,20 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
           background: 'rgba(255,255,255,0.95)',
           borderRadius: 16,
           boxShadow: '0 4px 32px rgba(0,0,0,0.15)',
-          padding: '32px 40px',
-          minWidth: 600,
-          maxWidth: 700,
+          padding: window.innerWidth < 768 ? '24px 20px' : '32px 40px',
+          width: window.innerWidth < 480 ? '90vw' : window.innerWidth < 768 ? '85vw' : 'auto',
+          minWidth: window.innerWidth < 480 ? 'auto' : window.innerWidth < 768 ? 450 : 600,
+          maxWidth: window.innerWidth < 480 ? '90vw' : window.innerWidth < 768 ? '85vw' : 700,
           maxHeight: '90vh',
           overflowY: 'auto',
           textAlign: 'center',
           display: 'flex',
           flexDirection: 'column',
-          gap: 24,
+          gap: window.innerWidth < 768 ? 16 : 24,
         }}
       >
         <h2 style={{ 
-          fontSize: '1.5rem', 
+          fontSize: window.innerWidth < 768 ? '1.25rem' : '1.5rem', 
           fontWeight: 700, 
           marginBottom: 8, 
           color: '#2563eb',
@@ -92,7 +93,7 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
         
         <p style={{ 
           color: '#64748b', 
-          fontSize: '0.95rem', 
+          fontSize: window.innerWidth < 768 ? '0.875rem' : '0.95rem', 
           margin: 0,
           lineHeight: 1.5
         }}>
@@ -101,8 +102,8 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 12,
+          gridTemplateColumns: window.innerWidth < 480 ? 'repeat(2, 1fr)' : window.innerWidth < 768 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+          gap: window.innerWidth < 768 ? 8 : 12,
           textAlign: 'left',
           margin: '8px 0'
         }}>
@@ -112,9 +113,9 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
+                gap: window.innerWidth < 768 ? 6 : 8,
                 cursor: 'pointer',
-                padding: '10px 12px',
+                padding: window.innerWidth < 768 ? '8px 10px' : '10px 12px',
                 borderRadius: 8,
                 background: selectedInterests.includes(interest.id) 
                   ? 'rgba(37, 99, 235, 0.1)' 
@@ -123,7 +124,7 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
                   ? '2px solid #2563eb'
                   : '2px solid #e2e8f0',
                 transition: 'all 0.2s ease',
-                fontSize: '0.9rem',
+                fontSize: window.innerWidth < 768 ? '0.8rem' : '0.9rem',
               }}
               onMouseEnter={(e) => {
                 if (!selectedInterests.includes(interest.id)) {
@@ -143,15 +144,15 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
                 checked={selectedInterests.includes(interest.id)}
                 onChange={() => handleInterestToggle(interest.id)}
                 style={{
-                  width: 16,
-                  height: 16,
+                  width: window.innerWidth < 768 ? 14 : 16,
+                  height: window.innerWidth < 768 ? 14 : 16,
                   accentColor: '#2563eb',
                   cursor: 'pointer',
                   flexShrink: 0,
                 }}
               />
               <span style={{
-                fontSize: '0.9rem',
+                fontSize: window.innerWidth < 768 ? '0.8rem' : '0.9rem',
                 fontWeight: 500,
                 color: '#334155',
                 flex: 1,
@@ -167,23 +168,24 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
 
         <div style={{ 
           display: 'flex', 
-          gap: 12, 
+          gap: window.innerWidth < 768 ? 8 : 12, 
           justifyContent: 'center',
-          marginTop: 8
+          marginTop: 8,
+          flexDirection: window.innerWidth < 480 ? 'column' : 'row'
         }}>
           <button
             style={{
-              padding: '12px 24px',
+              padding: window.innerWidth < 768 ? '10px 20px' : '12px 24px',
               background: '#64748b',
               color: '#fff',
               border: 'none',
               borderRadius: 8,
               fontWeight: 600,
-              fontSize: '0.95rem',
+              fontSize: window.innerWidth < 768 ? '0.875rem' : '0.95rem',
               cursor: 'pointer',
               boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
               transition: 'background 0.2s',
-              minWidth: 100,
+              minWidth: window.innerWidth < 480 ? '100%' : 100,
             }}
             onClick={handleClose}
             onMouseEnter={(e) => e.currentTarget.style.background = '#475569'}
@@ -193,17 +195,17 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
           </button>
           <button
             style={{
-              padding: '12px 24px',
+              padding: window.innerWidth < 768 ? '10px 20px' : '12px 24px',
               background: selectedInterests.length > 0 ? '#2563eb' : '#cbd5e1',
               color: '#fff',
               border: 'none',
               borderRadius: 8,
               fontWeight: 600,
-              fontSize: '0.95rem',
+              fontSize: window.innerWidth < 768 ? '0.875rem' : '0.95rem',
               cursor: selectedInterests.length > 0 ? 'pointer' : 'not-allowed',
               boxShadow: selectedInterests.length > 0 ? '0 2px 8px rgba(0,0,0,0.10)' : 'none',
               transition: 'background 0.2s',
-              minWidth: 100,
+              minWidth: window.innerWidth < 480 ? '100%' : 100,
             }}
             onClick={handleConfirm}
             disabled={selectedInterests.length === 0}

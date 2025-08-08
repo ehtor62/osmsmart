@@ -107,6 +107,33 @@ export default function Map() {
     setPanelOpen(false);
   }, []);
 
+  // Shared geolocation function
+  const getCurrentLocationAndExecute = (onSuccess: (lat: number, lon: number) => void, onError?: () => void) => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setPosition([pos.coords.latitude, pos.coords.longitude]);
+          onSuccess(pos.coords.latitude, pos.coords.longitude);
+        },
+        () => {
+          setPosition([47.3769, 8.5417]); // fallback: Zurich
+          if (onError) {
+            onError();
+          } else {
+            onSuccess(47.3769, 8.5417);
+          }
+        }
+      );
+    } else {
+      setPosition([47.3769, 8.5417]); // fallback: Zurich
+      if (onError) {
+        onError();
+      } else {
+        onSuccess(47.3769, 8.5417);
+      }
+    }
+  };
+
   // Function to trigger geolocation search and OSM fetch
   const handleFindLocation = () => {
     setShowInitModal(false);
@@ -114,21 +141,9 @@ export default function Map() {
     setSpinnerMode('fetching');
     setMapMode('explore');
     setGridSize(3); // always start with 3x3
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setPosition([pos.coords.latitude, pos.coords.longitude]);
-          setShouldFetchOsm(true);
-        },
-        () => {
-          setPosition([47.3769, 8.5417]); // fallback: Zurich
-          setShouldFetchOsm(true);
-        }
-      );
-    } else {
-      setPosition([47.3769, 8.5417]); // fallback: Zurich
+    getCurrentLocationAndExecute(() => {
       setShouldFetchOsm(true);
-    }
+    });
   };
 
   // Function to handle "I have a specific interest" - center map on current location without fetching OSM data
@@ -141,31 +156,21 @@ export default function Map() {
     // Clear any existing OSM data to show a clean map
     setOsmData(null);
     setPanelOpen(false);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setPosition([pos.coords.latitude+0.68, pos.coords.longitude+2.9]);
-          // Hide spinner and show interest selection modal
-          setTimeout(() => {
-            setShowSpinner(false);
-            setShowInterestModal(true);
-          }, 800);
-        },
-        () => {
-          setPosition([47.3769, 8.5417]); // fallback: Zurich
-          setTimeout(() => {
-            setShowSpinner(false);
-            setShowInterestModal(true);
-          }, 800);
-        }
-      );
-    } else {
-      setPosition([47.3769, 8.5417]); // fallback: Zurich
-      setTimeout(() => {
-        setShowSpinner(false);
-        setShowInterestModal(true);
-      }, 800);
-    }
+    getCurrentLocationAndExecute(
+      () => {
+        // Hide spinner and show interest selection modal
+        setTimeout(() => {
+          setShowSpinner(false);
+          setShowInterestModal(true);
+        }, 800);
+      },
+      () => {
+        setTimeout(() => {
+          setShowSpinner(false);
+          setShowInterestModal(true);
+        }, 800);
+      }
+    );
   };
 
   // Function to handle interest selection confirmation
