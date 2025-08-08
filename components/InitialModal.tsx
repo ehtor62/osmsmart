@@ -4,9 +4,10 @@ interface InitialModalProps {
   show: boolean;
   onFindLocation: () => void;
   onSpecificInterest: () => void;
+  onFindSomewhereElse: () => void;
 }
 
-const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onSpecificInterest }) => {
+const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onSpecificInterest, onFindSomewhereElse }) => {
   if (!show) return null;
   return (
     <div
@@ -52,7 +53,7 @@ const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onSpe
         >
           Discover and Explore
         </h1>
-        <div style={{ display: 'flex', gap: 18, justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, justifyContent: 'center' }}>
           <button
             style={{
               padding: '10px 24px',
@@ -68,7 +69,7 @@ const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onSpe
             }}
             onClick={onFindLocation}
           >
-            Everything around me
+            All Attractions around me
           </button>
           <button
             style={{
@@ -85,7 +86,24 @@ const InitialModal: React.FC<InitialModalProps> = ({ show, onFindLocation, onSpe
             }}
             onClick={onSpecificInterest}
           >
-            I have a specific interest
+            I have a specific interest here
+          </button>
+          <button
+            style={{
+              padding: '10px 24px',
+              background: '#10b981',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              fontWeight: 600,
+              fontSize: '1rem',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+              transition: 'background 0.2s',
+            }}
+            onClick={onFindSomewhereElse}
+          >
+            Everything somewhere else
           </button>
         </div>
         {/* Mode selection buttons removed for new workflow */}

@@ -5,6 +5,7 @@ import type { OsmElement } from "../types/osm";
 import { tagGroups } from "../utils/allowedTags";
 import InitialModal from "./InitialModal";
 import InterestSelectionModal from "./InterestSelectionModal";
+import AddressSearchModal from "./AddressSearchModal";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle } from "react-leaflet";
 import OsmDataPanel from "./OsmDataPanel";
 import GeminiSummaryPanel from "./GeminiSummaryPanel";
@@ -44,6 +45,7 @@ export default function Map() {
   const [topPanelMinimized, setTopPanelMinimized] = useState<boolean>(false);
   const [showInitModal, setShowInitModal] = useState<boolean>(true);
   const [showInterestModal, setShowInterestModal] = useState<boolean>(false);
+  const [showAddressSearchModal, setShowAddressSearchModal] = useState<boolean>(false);
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [shouldFetchOsm, setShouldFetchOsm] = useState<boolean>(false);
   const [showSpinner, setShowSpinner] = useState<boolean>(false);
@@ -173,6 +175,40 @@ export default function Map() {
     );
   };
 
+  // Function to handle "Everything somewhere else" - allow user to search/explore a different location
+  const handleFindSomewhereElse = () => {
+    setShowInitModal(false);
+    setShowAddressSearchModal(true);
+  };
+
+  // Function to handle address search location selection
+  const handleAddressLocationSelect = (lat: number, lon: number, name: string) => {
+    setShowAddressSearchModal(false);
+    setMapMode('explore');
+    setGridSize(3); // Start with 3x3 grid
+    
+    // Clear any existing OSM data and close panels
+    setOsmData(null);
+    setPanelOpen(false);
+    setTopPanelOpen(false);
+    
+    // Update position and trigger OSM data fetch
+    setPosition([lat, lon]);
+    console.log(`Selected location: ${name} (${lat}, ${lon})`);
+    
+    // Show spinner and fetch OSM data for the selected location
+    setShowSpinner(true);
+    setSpinnerMode('fetching');
+    setShouldFetchOsm(true);
+  };
+
+  // Function to handle address search modal close
+  const handleAddressSearchClose = () => {
+    setShowAddressSearchModal(false);
+    // Show initial modal again if user cancels address search
+    setShowInitModal(true);
+  };
+
   // Function to handle interest selection confirmation
   const handleInterestConfirm = (interests: string[]) => {
     setShowInterestModal(false);
@@ -271,11 +307,17 @@ export default function Map() {
           show={showInitModal}
           onFindLocation={handleFindLocation}
           onSpecificInterest={handleSpecificInterest}
+          onFindSomewhereElse={handleFindSomewhereElse}
         />
         <InterestSelectionModal
           show={showInterestModal}
           onConfirm={handleInterestConfirm}
           onClose={handleInterestCancel}
+        />
+        <AddressSearchModal
+          show={showAddressSearchModal}
+          onLocationSelect={handleAddressLocationSelect}
+          onClose={handleAddressSearchClose}
         />
         <OsmDataPanel
           open={panelOpen}
