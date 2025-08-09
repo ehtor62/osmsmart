@@ -143,6 +143,16 @@ export default function Map() {
     setSpinnerMode('fetching');
     setMapMode('explore');
     setGridSize(3); // always start with 3x3
+    
+    // Clear any previous specific interest filters to show all attractions
+    setSelectedInterests([]);
+    setFilteredTags(undefined);
+    
+    // Clear any existing OSM data and close panels
+    setOsmData(null);
+    setPanelOpen(false);
+    setTopPanelOpen(false);
+    
     getCurrentLocationAndExecute(() => {
       setShouldFetchOsm(true);
     });
@@ -155,9 +165,19 @@ export default function Map() {
     setShowSpinner(true);
     setSpinnerMode('centering');
     setMapMode('interest');
-    // Clear any existing OSM data to show a clean map
+    
+    // Reset grid search state from any previous "all attractions" search
+    setGridSize(3); // Reset to initial grid size
+    
+    // Clear any existing OSM data and close panels to show a clean map
     setOsmData(null);
     setPanelOpen(false);
+    setTopPanelOpen(false);
+    
+    // Clear any previous search state
+    setSelectedInterests([]);
+    setFilteredTags(undefined);
+    
     getCurrentLocationAndExecute(
       () => {
         // Hide spinner and show interest selection modal
