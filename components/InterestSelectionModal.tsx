@@ -106,7 +106,7 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
           margin: 0,
           lineHeight: 1.5
         }}>
-          Select the categories you&apos;d like to explore around your location
+          Select one or more categories you&apos;d like to explore around your location
         </p>
 
         <div style={{
@@ -185,26 +185,6 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
           <button
             style={{
               padding: window.innerWidth < 768 ? '10px 20px' : '12px 24px',
-              background: '#64748b',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              fontWeight: 600,
-              fontSize: window.innerWidth < 768 ? '0.875rem' : '0.95rem',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-              transition: 'background 0.2s',
-              minWidth: window.innerWidth < 480 ? '100%' : 100,
-            }}
-            onClick={handleClose}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#475569'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#64748b'}
-          >
-            Cancel
-          </button>
-          <button
-            style={{
-              padding: window.innerWidth < 768 ? '10px 20px' : '12px 24px',
               background: selectedInterests.length > 0 ? '#2563eb' : '#cbd5e1',
               color: '#fff',
               border: 'none',
@@ -230,6 +210,26 @@ const InterestSelectionModal: React.FC<InterestSelectionModalProps> = ({
             }}
           >
             Explore ({selectedInterests.length})
+          </button>
+          <button
+            style={{
+              padding: window.innerWidth < 768 ? '10px 20px' : '12px 24px',
+              background: '#64748b',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              fontWeight: 600,
+              fontSize: window.innerWidth < 768 ? '0.875rem' : '0.95rem',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+              transition: 'background 0.2s',
+              minWidth: window.innerWidth < 480 ? '100%' : 100,
+            }}
+            onClick={handleClose}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#475569'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#64748b'}
+          >
+            Cancel
           </button>
         </div>
       </div>

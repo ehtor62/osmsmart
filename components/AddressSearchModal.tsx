@@ -140,7 +140,7 @@ const AddressSearchModal: React.FC<AddressSearchModalProps> = ({ show, onLocatio
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#2563eb' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#1f2937' }}>
             Search for a Location
           </h2>
           <button
@@ -174,6 +174,9 @@ const AddressSearchModal: React.FC<AddressSearchModalProps> = ({ show, onLocatio
               fontSize: '1rem',
               outline: 'none',
               transition: 'border-color 0.2s',
+              color: '#1f2937',
+              backgroundColor: '#ffffff',
+              caretColor: '#2563eb',
             }}
             onFocus={(e) => {
               e.target.style.borderColor = '#2563eb';
