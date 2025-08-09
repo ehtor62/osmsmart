@@ -204,7 +204,7 @@ export default function Map() {
   // Function to handle address search location selection
   const handleAddressLocationSelect = (lat: number, lon: number, name: string) => {
     setShowAddressSearchModal(false);
-    setMapMode('explore');
+    setMapMode('interest'); // Set to interest mode for filtered search
     setGridSize(3); // Start with 3x3 grid
     
     // Clear any existing OSM data and close panels
@@ -212,14 +212,23 @@ export default function Map() {
     setPanelOpen(false);
     setTopPanelOpen(false);
     
-    // Update position and trigger OSM data fetch
+    // Clear any previous search state
+    setSelectedInterests([]);
+    setFilteredTags(undefined);
+    
+    // Update position but don't fetch OSM data yet
     setPosition([lat, lon]);
     console.log(`Selected location: ${name} (${lat}, ${lon})`);
     
-    // Show spinner and fetch OSM data for the selected location
+    // Show spinner briefly to indicate location setting, then show interest modal
     setShowSpinner(true);
-    setSpinnerMode('fetching');
-    setShouldFetchOsm(true);
+    setSpinnerMode('centering');
+    
+    // Show interest selection modal after a brief delay
+    setTimeout(() => {
+      setShowSpinner(false);
+      setShowInterestModal(true);
+    }, 800);
   };
 
   // Function to handle address search modal close

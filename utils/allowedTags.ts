@@ -198,7 +198,6 @@ export const tagGroups = {
     'amenity:food_court',
     'shop:ice_cream',
     'landuse:vineyard',
-    'shop:mall',
   ],
   Education: [
     'amenity:community_centre',
@@ -366,6 +365,7 @@ export const tagGroups = {
     'railway:station',
   ],
   Shopping: [
+    'shop:mall',
     'shop:alcohol',
     'shop:bakery',
     'shop:beverages',
