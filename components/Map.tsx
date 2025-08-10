@@ -6,17 +6,16 @@ import { tagGroups } from "../utils/allowedTags";
 import InitialModal from "./InitialModal";
 import InterestSelectionModal from "./InterestSelectionModal";
 import AddressSearchModal from "./AddressSearchModal";
-import { MapContainer, TileLayer, Marker, Popup, Rectangle } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Rectangle, Circle } from "react-leaflet";
 import OsmDataPanel from "./OsmDataPanel";
 import GeminiSummaryPanel from "./GeminiSummaryPanel";
 import FactReportPanel, { useFactReportLogic } from "./FactReportPanel";
 import GeminiMarkers from "./GeminiMarkers";
 import LoadingSpinner from "./LoadingSpinner";
 import { 
-  getTileAreaSqMeters, 
-  calculateTileBounds,
   CenterMap, 
   FitBoundsListener,
+  SearchRadiusCircle,
   type TileBounds 
 } from "./MapHelpers";
 
@@ -50,25 +49,26 @@ export default function Map() {
   const [shouldFetchOsm, setShouldFetchOsm] = useState<boolean>(false);
   const [showSpinner, setShowSpinner] = useState<boolean>(false);
   const [spinnerMode, setSpinnerMode] = useState<'fetching' | 'centering'>('fetching');
-  const [gridSize, setGridSize] = useState<number>(3); // start with 3x3
+  const [radius, setRadius] = useState<number>(25); // start with 25m radius for faster initial search
   const [filteredTags, setFilteredTags] = useState<Set<string> | undefined>(undefined);
   const [mapMode, setMapMode] = useState<'explore' | 'interest'>('explore'); // Track map mode
+  const [showSearchCircle, setShowSearchCircle] = useState<boolean>(false); // Control circle visibility independently
   
   // Real-time fetch progress states
-  const [tilesChecked, setTilesChecked] = useState<number>(0);
+  const [currentRadius, setCurrentRadius] = useState<number>(25);
   const [elementsRetrieved, setElementsRetrieved] = useState<number>(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  
-  // Always use zoom 17 for tile calculations as per user request
-  const zoomLevel = 17;
 
   // Callback functions wrapped with useCallback to prevent unnecessary re-renders
   const handleDataFetched = useCallback((data: OsmElement[]) => setOsmData(data), []);
   const handleSpinnerToggle = useCallback((show: boolean) => setShowSpinner(show), []);
-  const handlePanelOpen = useCallback(() => setPanelOpen(true), []);
-  const handleGridSizeUpdate = useCallback((size: number) => setGridSize(size), []);
+  const handlePanelOpen = useCallback(() => {
+    setPanelOpen(true);
+    setShowSearchCircle(true); // Show circle when panel opens
+  }, []);
+  const handleRadiusUpdate = useCallback((newRadius: number) => setRadius(newRadius), []);
   const handleFetchComplete = useCallback(() => setShouldFetchOsm(false), []);
-  const handleTilesCheckedUpdate = useCallback((count: number) => setTilesChecked(count), []);
+  const handleRadiusCheckedUpdate = useCallback((radius: number) => setCurrentRadius(radius), []);
   const handleElementsRetrievedUpdate = useCallback((count: number) => setElementsRetrieved(count), []);
   const handleFetchErrorUpdate = useCallback((error: string | null) => setFetchError(error), []);
 
@@ -76,15 +76,14 @@ export default function Map() {
   const { } = useFetchOsmData({
     shouldFetchOsm,
     position,
-    gridSize,
-    zoomLevel,
+    radius,
     filteredTags,
     onDataFetched: handleDataFetched,
     onSpinnerToggle: handleSpinnerToggle,
     onPanelOpen: handlePanelOpen,
-    onGridSizeUpdate: handleGridSizeUpdate,
+    onRadiusUpdate: handleRadiusUpdate,
     onFetchComplete: handleFetchComplete,
-    onTilesCheckedUpdate: handleTilesCheckedUpdate,
+    onRadiusCheckedUpdate: handleRadiusCheckedUpdate,
     onElementsRetrievedUpdate: handleElementsRetrievedUpdate,
     onFetchErrorUpdate: handleFetchErrorUpdate
   });
@@ -100,7 +99,6 @@ export default function Map() {
         window.dispatchEvent(event);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [panelOpen, position]); // tileBounds intentionally omitted: recomputed each render
 
   // On load, center on Zurich only, do not open panel
@@ -142,7 +140,7 @@ export default function Map() {
     setShowSpinner(true);
     setSpinnerMode('fetching');
     setMapMode('explore');
-    setGridSize(3); // always start with 3x3
+    setRadius(50); // always start with 50m radius
     
     // Clear any previous specific interest filters to show all attractions
     setSelectedInterests([]);
@@ -167,7 +165,7 @@ export default function Map() {
     setMapMode('interest');
     
     // Reset grid search state from any previous "all attractions" search
-    setGridSize(3); // Reset to initial grid size
+    setRadius(50); // Reset to initial radius
     
     // Clear any existing OSM data and close panels to show a clean map
     setOsmData(null);
@@ -205,7 +203,7 @@ export default function Map() {
   const handleAddressLocationSelect = (lat: number, lon: number, name: string) => {
     setShowAddressSearchModal(false);
     setMapMode('interest'); // Set to interest mode for filtered search
-    setGridSize(3); // Start with 3x3 grid
+    setRadius(50); // Start with 50m radius
     
     // Clear any existing OSM data and close panels
     setOsmData(null);
@@ -287,9 +285,11 @@ export default function Map() {
   };
 
   // tileBounds must be declared before useEffect
-  let tileBounds: TileBounds | null = null;
+  const tileBounds: TileBounds | null = null;
   if (position) {
-    tileBounds = calculateTileBounds(position, gridSize, zoomLevel);
+    // TODO: Implement radius-based bounds calculation for display
+    // For now, disable tile bounds visualization
+    // tileBounds = calculateRadiusBounds(position, currentRadius);
   }
 
   const showGeminiSpinner = loadingSummary && !topPanelOpen;
@@ -323,13 +323,9 @@ export default function Map() {
         message={spinnerMode === 'centering' ? "Finding your location…" : "Finding places around you…"}
         zIndex={6000}
         fetchError={spinnerMode === 'centering' ? null : fetchError}
-        tilesChecked={spinnerMode === 'centering' ? 0 : tilesChecked}
+        currentRadius={spinnerMode === 'centering' ? 0 : currentRadius}
         elementsRetrieved={spinnerMode === 'centering' ? 0 : elementsRetrieved}
-        position={position}
-        getTileAreaSqMeters={spinnerMode === 'centering' ? undefined : (zoom: number, lat: number) => 
-          getTileAreaSqMeters(zoom, lat, tilesChecked, position)
-        }
-        zoomLevel={zoomLevel}
+        getRadiusAreaSqMeters={(radius: number) => Math.PI * radius * radius} // Simple circle area calculation
       />
       <div className="w-screen h-screen flex flex-row" style={{ position: 'relative' }}>
         <InitialModal
@@ -408,7 +404,7 @@ export default function Map() {
         <div className="flex-1 h-full">
           <MapContainer
             center={position || [47.3769, 8.5417]}
-            zoom={mapMode === 'interest' ? 18 : zoomLevel} // Higher zoom for specific interest mode
+            zoom={mapMode === 'interest' ? 19 : 18} // Higher zoom for specific interest mode, default 18
             scrollWheelZoom={true}
             style={{ width: "100%", height: "100vh" }}
           >
@@ -442,6 +438,27 @@ export default function Map() {
                     </div>
                   </Popup>
                 </Marker>
+                {/* Search radius circle - persistent until manually closed */}
+                {showSearchCircle && osmData && osmData.length > 0 && currentRadius > 0 && (
+                  <>
+                    <Circle
+                      center={position}
+                      radius={currentRadius}
+                      pathOptions={{
+                        color: '#3b82f6',
+                        weight: 2,
+                        opacity: 0.8,
+                        fillColor: '#3b82f6',
+                        fillOpacity: 0.1
+                      }}
+                    />
+                    <SearchRadiusCircle 
+                      center={position} 
+                      radius={currentRadius} 
+                      autoFit={true} 
+                    />
+                  </>
+                )}
                 {/* Gemini Markers Component */}
                 <GeminiMarkers summary={summary} />
                 {/* Markers for OSM way elements (center) */}

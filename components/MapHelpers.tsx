@@ -182,3 +182,38 @@ export function FitBoundsListener() {
   }, [map]);
   return null;
 }
+
+// Component: SearchRadiusCircle that shows search radius and fits bounds
+export function SearchRadiusCircle({ 
+  center, 
+  radius, 
+  autoFit = true 
+}: { 
+  center: [number, number]; 
+  radius: number; 
+  autoFit?: boolean; 
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (autoFit && radius > 0) {
+      // Calculate bounds that include the entire circle
+      const radiusInDegrees = radius / 111000; // Rough conversion: 1 degree ≈ 111km
+      const bounds: TileBounds = [
+        [center[0] - radiusInDegrees, center[1] - radiusInDegrees], // Southwest
+        [center[0] + radiusInDegrees, center[1] + radiusInDegrees]  // Northeast
+      ];
+      
+      // Fit map to show the entire circle with some padding
+      setTimeout(() => {
+        map.fitBounds(bounds, { 
+          animate: true, 
+          padding: [50, 50],
+          maxZoom: 16 // Don't zoom in too much
+        });
+      }, 100); // Small delay to ensure circle is rendered
+    }
+  }, [map, center, radius, autoFit]);
+
+  return null; // This component only handles the auto-fitting behavior
+}
